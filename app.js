@@ -29,6 +29,48 @@ function saveToStorage(key, value){
   catch(err){ console.warn('Could not save', key, err); return false; }
 }
 
+// ---------- Supabase (shared database + storage for presets/brand assets/projects) ----------
+// localStorage above now only acts as an offline cache; Supabase is the source of truth.
+const db = (window.SUPABASE_CONFIG && window.supabase)
+  ? window.supabase.createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.anonKey)
+  : null;
+const COVER_BUCKET = 'cover-images';
+const COVER_PUBLIC_PREFIX = db ? `${window.SUPABASE_CONFIG.url}/storage/v1/object/public/${COVER_BUCKET}/` : '';
+
+async function uploadCoverImage(file, folder){
+  const ext = file.name && file.name.includes('.') ? file.name.split('.').pop() : 'png';
+  const path = `${folder}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await db.storage.from(COVER_BUCKET).upload(path, file, { cacheControl:'3600', upsert:false });
+  if(error) throw error;
+  return db.storage.from(COVER_BUCKET).getPublicUrl(path).data.publicUrl;
+}
+function storagePathFromUrl(url){
+  return (url && url.startsWith(COVER_PUBLIC_PREFIX)) ? url.slice(COVER_PUBLIC_PREFIX.length) : null;
+}
+async function deleteCoverImage(url){
+  const path = storagePathFromUrl(url);
+  if(!path) return;
+  try{ await db.storage.from(COVER_BUCKET).remove([path]); }
+  catch(err){ console.warn('Could not delete stored image', err); }
+}
+
+function presetFromRow(row){
+  return { id: row.id, name: row.name, clientName: row.client_name || '', page: row.page, elements: row.elements };
+}
+function presetToRow(preset){
+  return { name: preset.name, client_name: preset.clientName || null, page: preset.page, elements: preset.elements };
+}
+function brandImageFromRow(row){
+  return { id: row.id, dbId: row.id, name: row.name, dataUrl: row.image_url };
+}
+function projectFromRow(row){
+  return {
+    id: row.id, dbId: row.id, projectName: row.project_name, location: row.location, clientName: row.client_name,
+    projectImage: row.project_image_url, presetId: row.preset_id, presetName: row.preset_name,
+    presetSnapshot: row.preset_snapshot, createdAt: row.created_at
+  };
+}
+
 const state = {
   page: { size:'A4', orientation:'portrait', width: 210, height: 297 },
   data: {
@@ -49,7 +91,7 @@ const state = {
 let presets = loadFromStorage(LS_KEYS.presets) || [];
 let brandImages = loadFromStorage(LS_KEYS.brandImages) || [];
 let projects = loadFromStorage(LS_KEYS.projects) || [];
-const createData = { projectName:'Riverside Residence', location:'Chattogram, Bangladesh', clientName:'John Smith', projectImage:null };
+const createData = { projectName:'Riverside Residence', location:'Chattogram, Bangladesh', clientName:'John Smith', projectImage:null, projectImageFile:null };
 
 let interaction = null;
 let suppressClick = false;
@@ -814,32 +856,51 @@ function onBrandFileSelected(file){
   const name = prompt('Name this logo / brand image:', file.name.replace(/\.[^.]+$/, ''));
   const input = document.getElementById('brandPhotoInput');
   if(!name){ input.value = ''; return; }
-  const reader = new FileReader();
-  reader.onload = () => {
-    // readAsDataURL preserves the source file's bytes as-is, so PNG alpha
-    // transparency survives untouched — no canvas re-encode that could flatten it.
-    uploadBrandImage(name, reader.result);
-    input.value = '';
-  };
-  reader.readAsDataURL(file);
+  uploadBrandImage(name, file);
+  input.value = '';
 }
-function uploadBrandImage(name, dataUrl){
-  const img = { id: newId('brand/logo'), name, dataUrl };
+async function uploadBrandImage(name, file){
+  // readAsDataURL preserves the source file's bytes as-is, so PNG alpha
+  // transparency survives untouched — no canvas re-encode that could flatten it.
+  const localPreview = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  const img = { id: newId('brand/logo'), dbId: null, name, dataUrl: localPreview };
   brandImages.push(img);
-  if(!saveToStorage(LS_KEYS.brandImages, brandImages)){
-    alert('Logo added for this session, but local storage is full so it may not persist after reload.');
-  }
   renderBrandList();
   renderPage();
   renderInspector();
+  if(db){
+    try{
+      const hostedUrl = await uploadCoverImage(file, 'logos');
+      const { data, error } = await db.from('brand_images').insert({ name, image_url: hostedUrl }).select().single();
+      if(error) throw error;
+      img.dbId = data.id;
+      img.dataUrl = hostedUrl;
+      renderBrandList();
+      renderPage();
+    }catch(err){
+      alert('Logo added for this session, but could not be saved to the database: ' + err.message);
+    }
+  }
+  saveToStorage(LS_KEYS.brandImages, brandImages);
   return img;
 }
-function deleteBrandImage(id){
+async function deleteBrandImage(id){
+  const img = brandImages.find(b => b.id === id);
   brandImages = brandImages.filter(b => b.id !== id);
   saveToStorage(LS_KEYS.brandImages, brandImages);
   renderBrandList();
   renderPage();
   renderInspector();
+  if(db && img && img.dbId){
+    const { error } = await db.from('brand_images').delete().eq('id', img.dbId);
+    if(error) console.warn('Could not delete brand image from the database', error);
+    await deleteCoverImage(img.dataUrl);
+  }
 }
 function renderBrandList(){
   const box = document.getElementById('brandList');
@@ -893,13 +954,21 @@ function importTemplateFile(file){
 function seedDefaultPreset(){
   presets.push({ id:newId('preset'), name:'A4 Architecture Cover', clientName: state.data.clientName, page: JSON.parse(JSON.stringify(state.page)), elements: JSON.parse(JSON.stringify(state.elements)) });
 }
-function saveCurrentAsPreset(){
+async function saveCurrentAsPreset(){
   const name = prompt('Name this preset:', 'Untitled preset');
   if(!name) return;
-  presets.push({ id:newId('preset'), name, clientName: state.data.clientName, page: JSON.parse(JSON.stringify(state.page)), elements: JSON.parse(JSON.stringify(state.elements)) });
-  if(!saveToStorage(LS_KEYS.presets, presets)){
-    alert('Preset added for this session, but local storage is full so it may not persist after reload.');
+  const preset = { id:newId('preset'), name, clientName: state.data.clientName, page: JSON.parse(JSON.stringify(state.page)), elements: JSON.parse(JSON.stringify(state.elements)) };
+  if(db){
+    try{
+      const { data, error } = await db.from('presets').insert(presetToRow(preset)).select().single();
+      if(error) throw error;
+      preset.id = data.id;
+    }catch(err){
+      alert('Could not save this preset to the database, so it will only exist on this device: ' + err.message);
+    }
   }
+  presets.push(preset);
+  saveToStorage(LS_KEYS.presets, presets);
   renderSavedPresetsList();
   refreshPresetSelect();
   const sel = document.getElementById('cpPresetSelect');
@@ -907,12 +976,16 @@ function saveCurrentAsPreset(){
   renderCreatePreview();
   alert(`Saved "${name}" — it's now selectable on the Create project tab.`);
 }
-function deletePreset(id){
+async function deletePreset(id){
   presets = presets.filter(p => p.id !== id);
   saveToStorage(LS_KEYS.presets, presets);
   renderSavedPresetsList();
   refreshPresetSelect();
   renderCreatePreview();
+  if(db){
+    const { error } = await db.from('presets').delete().eq('id', id);
+    if(error) console.warn('Could not delete preset from the database', error);
+  }
 }
 function renderSavedPresetsList(){
   const box = document.getElementById('savedPresetsList');
@@ -944,6 +1017,7 @@ function onCreateFieldInput(field, value){
 function triggerCreatePhotoUpload(){ document.getElementById('cpPhotoInput').click(); }
 function onCreatePhotoSelected(file){
   if(!file) return;
+  createData.projectImageFile = file;
   const reader = new FileReader();
   reader.onload = () => {
     createData.projectImage = reader.result;
@@ -987,9 +1061,10 @@ function renderCreatePreview(){
 }
 
 // ---------- projects (connected to the preset that generated them) ----------
-function recordProject(preset){
+async function recordProject(preset){
   const project = {
     id: newId('project'),
+    dbId: null,
     projectName: createData.projectName,
     location: createData.location,
     clientName: createData.clientName,
@@ -1000,10 +1075,30 @@ function recordProject(preset){
     createdAt: new Date().toISOString()
   };
   projects.unshift(project);
-  if(!saveToStorage(LS_KEYS.projects, projects)){
-    alert('Project generated, but local storage is full so it may not persist after reload.');
-  }
+  saveToStorage(LS_KEYS.projects, projects);
   renderProjectsList();
+  if(db){
+    try{
+      let hostedUrl = null;
+      if(createData.projectImageFile) hostedUrl = await uploadCoverImage(createData.projectImageFile, 'projects');
+      const row = {
+        project_name: project.projectName,
+        location: project.location,
+        client_name: project.clientName,
+        preset_id: preset.id,
+        preset_name: project.presetName,
+        preset_snapshot: project.presetSnapshot,
+        project_image_url: hostedUrl
+      };
+      const { data, error } = await db.from('projects').insert(row).select().single();
+      if(error) throw error;
+      project.dbId = data.id;
+      if(hostedUrl) project.projectImage = hostedUrl;
+      saveToStorage(LS_KEYS.projects, projects);
+    }catch(err){
+      console.warn('Could not save this project to the database; it will only exist on this device.', err);
+    }
+  }
   return project;
 }
 function renderProjectsList(){
@@ -1035,10 +1130,18 @@ function reprintProject(id){
   updatePrintStyle(p.presetSnapshot.page.width, p.presetSnapshot.page.height);
   window.print();
 }
-function deleteProject(id){
+async function deleteProject(id){
+  const project = projects.find(p => p.id === id);
   projects = projects.filter(p => p.id !== id);
   saveToStorage(LS_KEYS.projects, projects);
   renderProjectsList();
+  if(db && project){
+    if(project.dbId){
+      const { error } = await db.from('projects').delete().eq('id', project.dbId);
+      if(error) console.warn('Could not delete project from the database', error);
+    }
+    await deleteCoverImage(project.projectImage);
+  }
 }
 function generateCover(){
   const preset = getSelectedPreset();
@@ -1105,12 +1208,6 @@ cpDropzoneEl.addEventListener('drop', e => {
   if(f) onCreatePhotoSelected(f);
 });
 
-if(!presets.length) seedDefaultPreset();
-saveToStorage(LS_KEYS.presets, presets);
-renderSavedPresetsList();
-renderBrandList();
-renderProjectsList();
-refreshPresetSelect();
 applyPageCSSVars();
 updatePrintStyle();
 updatePageSub();
@@ -1118,3 +1215,49 @@ syncPageSizeSelect();
 buildRulerLabels();
 refreshUndoRedoButtons();
 render();
+
+async function initFromDatabase(){
+  if(!db){
+    console.warn('Supabase is not configured (check supabase-config.js); staying on local-only storage.');
+    if(!presets.length) seedDefaultPreset();
+    finishDataInit();
+    return;
+  }
+  try{
+    const [presetRes, brandRes, projectRes] = await Promise.all([
+      db.from('presets').select('*').order('created_at', { ascending:false }),
+      db.from('brand_images').select('*').order('created_at', { ascending:false }),
+      db.from('projects').select('*').order('created_at', { ascending:false })
+    ]);
+    if(presetRes.error) throw presetRes.error;
+    if(brandRes.error) throw brandRes.error;
+    if(projectRes.error) throw projectRes.error;
+
+    presets = presetRes.data.map(presetFromRow);
+    brandImages = brandRes.data.map(brandImageFromRow);
+    projects = projectRes.data.map(projectFromRow);
+
+    if(!presets.length){
+      seedDefaultPreset();
+      const { data, error } = await db.from('presets').insert(presetToRow(presets[0])).select().single();
+      if(!error) presets[0] = presetFromRow(data);
+    }
+
+    saveToStorage(LS_KEYS.presets, presets);
+    saveToStorage(LS_KEYS.brandImages, brandImages);
+    saveToStorage(LS_KEYS.projects, projects);
+  }catch(err){
+    console.warn('Could not reach the database; falling back to the last locally cached data.', err);
+    if(!presets.length) seedDefaultPreset();
+  }
+  finishDataInit();
+}
+function finishDataInit(){
+  renderSavedPresetsList();
+  renderBrandList();
+  renderProjectsList();
+  refreshPresetSelect();
+  renderCreatePreview();
+  render();
+}
+initFromDatabase();
