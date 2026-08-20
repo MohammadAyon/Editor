@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Cover generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <div class="topbar no-print">
+    <div class="topbar-left">
+      <h1>Cover generator</h1>
+      <span class="sub" id="pageSub">A4 Portrait · 210 × 297mm</span>
+    </div>
+    <div class="topbar-tabs">
+      <button class="tab-btn active" id="tabBtnEditor" onclick="switchTab('editor')">Preset editor</button>
+      <button class="tab-btn" id="tabBtnCreate" onclick="switchTab('create')">Create project</button>
+    </div>
+    <div class="topbar-right" id="editorTopbarActions">
+      <button class="btn small" id="btnUndo" onclick="undo()" disabled>Undo</button>
+      <button class="btn small" id="btnRedo" onclick="redo()" disabled>Redo</button>
+      <button class="btn primary" onclick="window.print()">Print</button>
+    </div>
+  </div>
+
+  <!-- ================= PRESET EDITOR ================= -->
+  <div class="workspace" id="viewEditor">
+
+    <aside class="sidebar sidebar-left no-print">
+      <div class="section">
+        <h2>Page</h2>
+        <div class="field">
+          <label>Size &amp; orientation</label>
+          <select id="pageSizeSelect" onchange="onPageSizeChange(this.value)">
+            <option value="A4-portrait">A4 Portrait</option>
+            <option value="A4-landscape">A4 Landscape</option>
+            <option value="A3-portrait">A3 Portrait</option>
+            <option value="A3-landscape">A3 Landscape</option>
+          </select>
+        </div>
+        <p class="hint">Elements are re-clamped to stay inside the new page if you switch to a smaller size.</p>
+      </div>
+
+      <div class="section">
+        <h2>Add element</h2>
+        <div class="grid2">
+          <button class="btn small" onclick="addElement('text')">+ Text</button>
+          <button class="btn small" onclick="addElement('image')">+ Image</button>
+          <button class="btn small" onclick="addElement('logo')">+ Logo</button>
+          <button class="btn small" onclick="addElement('line')">+ Line</button>
+          <button class="btn small" onclick="addElement('rect')">+ Rectangle</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Project data (preview)</h2>
+        <div class="field">
+          <label>Project name</label>
+          <input type="text" id="data-projectName" oninput="onDataInput('projectName', this.value)">
+        </div>
+        <div class="field">
+          <label>Location</label>
+          <input type="text" id="data-location" oninput="onDataInput('location', this.value)">
+        </div>
+        <div class="field">
+          <label>Client name</label>
+          <input type="text" id="data-clientName" oninput="onDataInput('clientName', this.value)">
+        </div>
+        <p class="hint">Text elements bound to these fields update live — this is just an editor-time preview.</p>
+      </div>
+
+      <div class="section">
+        <h2>Brand assets</h2>
+        <div class="row-btns">
+          <button class="btn small" onclick="triggerBrandUpload()">Upload logo</button>
+        </div>
+        <input type="file" id="brandPhotoInput" accept="image/png,image/*" style="display:none" onchange="onBrandFileSelected(this.files[0])">
+        <div id="brandList" style="margin-top:10px"></div>
+        <p class="hint" style="margin-top:8px">PNG keeps transparency. Logos are shared across every preset and project — stored under a <code>brand/</code> reference, separate from project photos.</p>
+      </div>
+
+      <div class="section">
+        <h2>Preset file</h2>
+        <div class="row-btns">
+          <button class="btn small" onclick="saveCurrentAsPreset()">Save as preset</button>
+        </div>
+        <div class="row-btns" style="margin-top:8px">
+          <button class="btn small" onclick="exportTemplate()">Export .json</button>
+          <button class="btn small" onclick="document.getElementById('importInput').click()">Import .json</button>
+        </div>
+        <input type="file" id="importInput" accept=".json" style="display:none" onchange="if(this.files[0]) importTemplateFile(this.files[0]); this.value='';">
+        <div id="savedPresetsList" style="margin-top:10px"></div>
+        <p class="hint" style="margin-top:8px">Saved presets persist in this browser and are selectable on Create project.</p>
+      </div>
+    </aside>
+
+    <main class="canvas-wrapper">
+      <div class="page-frame">
+        <div class="ruler-corner no-print"></div>
+        <div class="ruler-top no-print" id="rulerTop"></div>
+        <div class="ruler-left no-print" id="rulerLeft"></div>
+        <div id="page" class="print-target"></div>
+      </div>
+    </main>
+
+    <aside class="sidebar sidebar-right no-print">
+      <div class="section">
+        <h2>Selection</h2>
+        <div id="inspector"></div>
+      </div>
+      <div class="section">
+        <h2>Template schema (JSON)</h2>
+        <pre id="schemaOutput"></pre>
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- ================= CREATE PROJECT ================= -->
+  <div class="workspace" id="viewCreate" style="display:none">
+
+    <aside class="sidebar sidebar-left no-print">
+      <div class="section">
+        <h2>New project</h2>
+        <div class="field">
+          <label>Project name</label>
+          <input type="text" id="cp-projectName" oninput="onCreateFieldInput('projectName', this.value)">
+        </div>
+        <div class="field">
+          <label>Location</label>
+          <input type="text" id="cp-location" oninput="onCreateFieldInput('location', this.value)">
+        </div>
+        <div class="field">
+          <label>Client name</label>
+          <input type="text" id="cp-clientName" oninput="onCreateFieldInput('clientName', this.value)">
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Project photo</h2>
+        <div class="dropzone" id="cpDropzone" onclick="triggerCreatePhotoUpload()">
+          <span>Drag a photo here, or click to browse</span>
+        </div>
+        <input type="file" id="cpPhotoInput" accept="image/*" style="display:none" onchange="onCreatePhotoSelected(this.files[0])">
+      </div>
+
+      <div class="section">
+        <h2>Preset</h2>
+        <div class="field">
+          <select id="cpPresetSelect" onchange="onCreatePresetChange()"></select>
+        </div>
+      </div>
+
+      <div class="section">
+        <button class="btn primary full" onclick="generateCover()">Generate cover</button>
+        <p class="hint" style="margin-top:12px">Saves this as a project linked to the preset used, then opens the print dialog at its exact page size.</p>
+      </div>
+    </aside>
+
+    <main class="canvas-wrapper">
+      <div class="preview-shell" id="previewShell">
+        <div id="projectPage" class="print-target"></div>
+      </div>
+    </main>
+
+    <aside class="sidebar sidebar-right no-print">
+      <div class="section">
+        <h2>Recent projects</h2>
+        <div id="projectsList"></div>
+      </div>
+    </aside>
+
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
