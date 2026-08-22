@@ -73,6 +73,7 @@ function projectFromRow(row){
 
 const state = {
   page: { size:'A4', orientation:'portrait', width: 210, height: 297 },
+  zoom: 1,
   data: {
     projectName: 'Midnight Bloom',
     location: 'Dhaka, Bangladesh',
@@ -98,6 +99,9 @@ let suppressClick = false;
 let guideVEl = null, guideHEl = null;
 let undoStack = [], redoStack = [];
 let lastEditKey = null, lastEditTime = 0;
+let konvaStage = null, konvaLayer = null, konvaTransformer = null;
+let konvaDragState = null;
+let konvaMarqueeState = null;
 
 // ---------- page size / orientation ----------
 function applyPageCSSVars(){
@@ -137,6 +141,7 @@ function onPageSizeChange(value){
   updatePageSub();
   buildRulerLabels();
   render();
+  centerZoomedPage();
 }
 function syncPageSizeSelect(){
   const sel = document.getElementById('pageSizeSelect');
@@ -148,7 +153,63 @@ function getEl(id){ return state.elements.find(e => e.id === id); }
 function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
 function round1(v){ return Math.round(v*10)/10; }
 function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function getPxPerMm(){ return document.getElementById('page').getBoundingClientRect().width / state.page.width; }
+function getPxPerMm(){
+  const page = document.getElementById('page');
+  return page.getBoundingClientRect().width / (state.page.width * state.zoom);
+}
+function rectFill(el){ return el.fill || '#ffffff'; }
+function rectStroke(el){ return el.stroke || '#171614'; }
+function lineStroke(el){ return el.stroke || '#171614'; }
+function lineWidth(el){ return Number.isFinite(el.strokeWidth) ? el.strokeWidth : 1; }
+function updateZoomReadout(){
+  const readout = document.getElementById('zoomReadout');
+  if(readout) readout.textContent = Math.round(state.zoom * 100) + '%';
+}
+function syncZoomLayout(){
+  const page = document.getElementById('page');
+  const frame = page && page.parentElement;
+  if(!page || !frame) return;
+  frame.style.width = `${16 + page.offsetWidth * state.zoom}px`;
+  frame.style.height = `${16 + page.offsetHeight * state.zoom}px`;
+}
+function centerZoomedPage(){
+  const wrapper = document.querySelector('.canvas-wrapper');
+  const frame = document.querySelector('.page-frame');
+  if(!wrapper || !frame) return;
+  const innerWidth = wrapper.clientWidth - 64;
+  wrapper.scrollLeft = Math.max(0, (frame.offsetWidth - innerWidth) / 2);
+  wrapper.scrollTop = Math.max(0, (frame.offsetHeight - (wrapper.clientHeight - 112)) / 2);
+}
+function setZoom(value, clientX, clientY){
+  const wrapper = document.querySelector('.canvas-wrapper');
+  const page = document.getElementById('page');
+  if(!wrapper || !page) return;
+  const oldZoom = state.zoom;
+  state.zoom = clamp(Math.round(value * 20) / 20, 0.25, 4);
+  if(state.zoom === oldZoom) return;
+  const before = page.getBoundingClientRect();
+  const anchorX = clientX == null ? before.left + before.width / 2 : clientX;
+  const anchorY = clientY == null ? before.top + before.height / 2 : clientY;
+  const localX = (anchorX - before.left) / oldZoom;
+  const localY = (anchorY - before.top) / oldZoom;
+  page.style.transform = `scale(${state.zoom})`;
+  syncZoomLayout();
+  const after = page.getBoundingClientRect();
+  if(clientX == null && clientY == null){
+    centerZoomedPage();
+  } else {
+    wrapper.scrollLeft += after.left + localX * state.zoom - anchorX;
+    wrapper.scrollTop += after.top + localY * state.zoom - anchorY;
+  }
+  updateZoomReadout();
+}
+function changeZoom(delta){ setZoom(state.zoom + delta); }
+function resetZoom(){ setZoom(1); }
+function onCanvasWheel(event){
+  if(getActiveTab() !== 'editor') return;
+  event.preventDefault();
+  setZoom(state.zoom * (event.deltaY < 0 ? 1.1 : 0.9), event.clientX, event.clientY);
+}
 
 // ---------- undo / redo ----------
 function pushUndo(){
@@ -210,8 +271,8 @@ function elementHTML(el, dataSource){
     const label = el.role === 'logo' ? 'Pick a logo in the inspector' : 'Click to add image';
     return `<div class="element el-image el-image-empty" data-id="${el.id}" data-role="${el.role||'photo'}" style="${style}"><span class="no-print">${label}</span></div>`;
   }
-  if(el.type === 'line') return `<div class="element el-line" data-id="${el.id}" style="${style}"></div>`;
-  if(el.type === 'rect') return `<div class="element el-rect" data-id="${el.id}" style="${style}"></div>`;
+  if(el.type === 'line') return `<div class="element el-line" data-id="${el.id}" style="${style}border-top-color:${lineStroke(el)};border-top-width:${lineWidth(el)}px;"></div>`;
+  if(el.type === 'rect') return `<div class="element el-rect" data-id="${el.id}" style="${style}background-color:${rectFill(el)};border-color:${rectStroke(el)};"></div>`;
   return '';
 }
 
@@ -238,7 +299,148 @@ function overlayHTML(){
 
 function renderPage(){
   guideVEl = null; guideHEl = null;
-  document.getElementById('page').innerHTML = state.elements.map(el => elementHTML(el)).join('') + overlayHTML();
+  const page = document.getElementById('page');
+  if(konvaStage){ konvaStage.destroy(); konvaStage = null; konvaLayer = null; konvaTransformer = null; }
+  page.innerHTML = state.elements.map(el => elementHTML(el)).join('') + overlayHTML();
+  page.classList.add('konva-editor-active');
+  renderKonva();
+  syncZoomLayout();
+}
+
+function mmToPx(mm){ return mm * getPxPerMm(); }
+function konvaTextValue(el){ return (el.prefix || '') + (el.field ? (state.data[el.field] || '') : (el.content || '')); }
+function makeKonvaNode(el){
+  const x = mmToPx(el.x), y = mmToPx(el.y), width = mmToPx(el.width), height = mmToPx(el.type === 'line' ? 2 : el.height);
+  let node;
+  if(el.type === 'text'){
+    node = new Konva.Text({ text:konvaTextValue(el), x, y, width, height, fontSize:el.fontSize, fontFamily:el.variant === 'display' ? 'Fraunces' : 'Inter', fontStyle:el.weight >= 600 ? 'bold' : 'normal', fill:'#171614', align:el.align, listening:true });
+  } else if(el.type === 'line'){
+    node = new Konva.Line({ x, y, points:[0, 1, width, 1], stroke:lineStroke(el), strokeWidth:lineWidth(el), listening:true });
+  } else if(el.type === 'rect'){
+    node = new Konva.Rect({ x, y, width, height, fill:rectFill(el), stroke:rectStroke(el), strokeWidth:1, listening:true });
+  } else {
+    node = new Konva.Group({ x, y, width, height, listening:true });
+    node.add(new Konva.Rect({ x:0, y:0, width, height, fill:'#EEEBE3', stroke:'#B4B0A4', dash:[4,3], listening:true }));
+    const src = resolveImageSrc(el);
+    if(src){
+      const image = new Image();
+      image.onload = () => { node.add(new Konva.Image({ image, width, height, listening:false })); node.getLayer().batchDraw(); };
+      image.src = src;
+    } else {
+      node.add(new Konva.Text({ text:el.role === 'logo' ? 'Pick a logo in the inspector' : 'Click to add image', x:0, y:height / 2 - 7, width, fontSize:10, fill:'#7A776E', align:'center', listening:false }));
+    }
+  }
+  node.id(el.id);
+  node.draggable(false);
+  node.on('mousedown', event => {
+    const native = event.evt;
+    native.stopPropagation();
+    if(native.shiftKey){
+      const next = new Set(state.selectedIds);
+      if(next.has(el.id)) next.delete(el.id); else next.add(el.id);
+      state.selectedIds = next;
+    } else if(!state.selectedIds.has(el.id)) state.selectedIds = new Set([el.id]);
+    renderInspector();
+    const pointer = konvaStage.getPointerPosition();
+    konvaDragState = { id:el.id, startX:pointer.x, startY:pointer.y, positions:Object.fromEntries([...state.selectedIds].map(id => { const selected = getEl(id); return [id, { x:selected.x, y:selected.y }]; })) };
+    pushUndo();
+  });
+  node.on('dblclick', () => { if(el.type === 'image' && !resolveImageSrc(el)) triggerImageUpload(el.id); });
+  return node;
+}
+function renderKonva(){
+  if(!window.Konva) return;
+  const page = document.getElementById('page');
+  if(!konvaStage){
+    const container = document.createElement('div');
+    container.className = 'konva-editor-layer no-print';
+    page.appendChild(container);
+    konvaStage = new Konva.Stage({ container, width:page.clientWidth, height:page.clientHeight });
+    konvaLayer = new Konva.Layer();
+    konvaStage.add(konvaLayer);
+    konvaStage.on('mousedown', event => {
+      if(event.target !== konvaStage) return;
+      event.evt.stopPropagation();
+      const pointer = konvaStage.getPointerPosition();
+      const page = document.getElementById('page');
+      const box = document.createElement('div');
+      box.className = 'marquee-box no-print';
+      page.appendChild(box);
+      konvaMarqueeState = { startX:pointer.x, startY:pointer.y, baseSelection:event.evt.shiftKey ? new Set(state.selectedIds) : new Set(), box };
+      if(!event.evt.shiftKey) state.selectedIds = new Set();
+    });
+    konvaStage.on('mousemove', () => {
+      if(konvaMarqueeState){
+        const pointer = konvaStage.getPointerPosition();
+        const left = Math.min(konvaMarqueeState.startX, pointer.x);
+        const top = Math.min(konvaMarqueeState.startY, pointer.y);
+        const width = Math.abs(pointer.x - konvaMarqueeState.startX);
+        const height = Math.abs(pointer.y - konvaMarqueeState.startY);
+        const pxPerMm = getPxPerMm();
+        konvaMarqueeState.box.style.left = left / pxPerMm + 'mm';
+        konvaMarqueeState.box.style.top = top / pxPerMm + 'mm';
+        konvaMarqueeState.box.style.width = width / pxPerMm + 'mm';
+        konvaMarqueeState.box.style.height = height / pxPerMm + 'mm';
+        return;
+      }
+      if(!konvaDragState) return;
+      const pointer = konvaStage.getPointerPosition();
+      const dx = (pointer.x - konvaDragState.startX) / getPxPerMm();
+      const dy = (pointer.y - konvaDragState.startY) / getPxPerMm();
+      Object.entries(konvaDragState.positions).forEach(([id, start]) => {
+        const el = getEl(id);
+        if(!el) return;
+        el.x = round1(clamp(start.x + dx, 0, state.page.width - el.width));
+        el.y = round1(clamp(start.y + dy, 0, state.page.height - heightOf(el)));
+        const node = konvaLayer.findOne('#' + id);
+        if(node){ node.x(mmToPx(el.x)); node.y(mmToPx(el.y)); }
+      });
+      konvaLayer.batchDraw();
+      updateSchemaView();
+    });
+    konvaStage.on('mouseup', () => {
+      if(konvaMarqueeState){
+        const pointer = konvaStage.getPointerPosition();
+        const pxPerMm = getPxPerMm();
+        const rect = {
+          left:Math.min(konvaMarqueeState.startX, pointer.x) / pxPerMm,
+          top:Math.min(konvaMarqueeState.startY, pointer.y) / pxPerMm,
+          right:Math.max(konvaMarqueeState.startX, pointer.x) / pxPerMm,
+          bottom:Math.max(konvaMarqueeState.startY, pointer.y) / pxPerMm
+        };
+        state.elements.forEach(el => {
+          const hit = !(el.x + el.width < rect.left || el.x > rect.right || el.y + heightOf(el) < rect.top || el.y > rect.bottom);
+          if(hit) konvaMarqueeState.baseSelection.add(el.id);
+        });
+        state.selectedIds = konvaMarqueeState.baseSelection;
+        konvaMarqueeState.box.remove();
+        konvaMarqueeState = null;
+        render();
+      } else if(konvaDragState){ konvaDragState = null; render(); }
+    });
+  }
+  konvaStage.size({ width:page.clientWidth, height:page.clientHeight });
+  konvaLayer.destroyChildren();
+  state.elements.forEach(el => konvaLayer.add(makeKonvaNode(el)));
+  konvaTransformer = new Konva.Transformer({ rotateEnabled:false, keepRatio:false, anchorSize:8, borderStroke:'#171614', anchorStroke:'#171614', anchorFill:'#171614', enabledAnchors:['middle-right','bottom-center','bottom-right'] });
+  const selected = [...state.selectedIds].map(id => konvaLayer.findOne('#' + id)).filter(Boolean);
+  if(selected.length === 1){
+    konvaTransformer.nodes(selected);
+    konvaTransformer.on('transformstart', pushUndo);
+    konvaTransformer.on('transformend', () => {
+      const node = selected[0], el = getEl(node.id());
+      if(!el) return;
+      const scaleX = node.scaleX(), scaleY = node.scaleY();
+      el.x = round1(clamp(node.x() / getPxPerMm(), 0, state.page.width - el.width));
+      el.y = round1(clamp(node.y() / getPxPerMm(), 0, state.page.height - heightOf(el)));
+      el.width = round1(clamp(el.width * scaleX, 5, state.page.width - el.x));
+      if(el.type !== 'line') el.height = round1(clamp(el.height * scaleY, 5, state.page.height - el.y));
+      node.scale({ x:1, y:1 });
+      render();
+    });
+    konvaLayer.add(konvaTransformer);
+  }
+  konvaLayer.draw();
 }
 
 function renderInspector(){
@@ -297,9 +499,20 @@ function renderInspector(){
           </select>
         </div>`;
       } else {
+        html += `<button class="btn small" onclick="triggerImageUpload('${el.id}')">${el.src ? 'Replace' : 'Add'} editor preview image</button>`;
         if(el.field) html += `<div class="bound-note">Bound to data field <strong>${el.field}</strong> — the photo uploaded on Create Project fills this slot.</div>`;
         if(el.src) html += `<button class="btn small" style="margin-top:6px" onclick="updateProp('${el.id}','src',null)">Remove editor preview image</button>`;
       }
+    }
+    if(el.type === 'rect'){
+      html += `
+        <div class="field color-field"><label>Fill</label><input type="color" value="${rectFill(el)}" onchange="updateProp('${el.id}','fill',this.value)"></div>
+        <div class="field color-field"><label>Border</label><input type="color" value="${rectStroke(el)}" onchange="updateProp('${el.id}','stroke',this.value)"></div>`;
+    }
+    if(el.type === 'line'){
+      html += `
+        <div class="field color-field"><label>Color</label><input type="color" value="${lineStroke(el)}" onchange="updateProp('${el.id}','stroke',this.value)"></div>
+        <div class="field"><label>Thickness (px)</label><input type="number" min="1" max="20" step="1" value="${lineWidth(el)}" oninput="updateProp('${el.id}','strokeWidth',parseFloat(this.value))"></div>`;
     }
     html += `
       <div class="row-btns" style="margin-top:14px">
@@ -378,6 +591,7 @@ function applyElementStyle(id){
     if(state.selectedIds.size === 1) syncInspectorNumbers(id);
     if(state.selectedIds.size > 1) updateSelectionBBox();
   }
+  renderKonva();
 }
 
 function updateSelectionBBox(){
@@ -425,13 +639,14 @@ function updateProp(id, prop, value){
   if(!el) return;
   pushUndoDebounced('prop:' + id + ':' + prop);
   el[prop] = value;
-  if(prop === 'src' || prop === 'variant' || prop === 'logoRef'){ renderPage(); renderInspector(); }
+  if(prop === 'src' || prop === 'variant' || prop === 'logoRef' || prop === 'fill' || prop === 'stroke' || prop === 'strokeWidth'){ renderPage(); renderInspector(); }
   else applyElementStyle(id);
   updateSchemaView();
 }
 function onDataInput(field, value){
   state.data[field] = value;
   updateBoundElementsContent(field);
+  renderKonva();
   updateSchemaView();
 }
 
@@ -453,8 +668,8 @@ function addElement(type){
   if(type === 'text') el = { id:newId('el'), type:'text', field:null, content:'New text', x:20, y:20, width:60, height:10, fontSize:12, weight:400, align:'left', variant:'body' };
   if(type === 'image') el = { id:newId('el'), type:'image', role:'photo', field:null, x:20, y:20, width:60, height:60, src:null };
   if(type === 'logo') el = { id:newId('el'), type:'image', role:'logo', logoRef: brandImages.length ? brandImages[0].id : null, x:20, y:20, width:40, height:40 };
-  if(type === 'line') el = { id:newId('el'), type:'line', x:20, y:20, width:100, height:0 };
-  if(type === 'rect') el = { id:newId('el'), type:'rect', x:20, y:20, width:60, height:40 };
+  if(type === 'line') el = { id:newId('el'), type:'line', x:20, y:20, width:100, height:0, stroke:'#171614', strokeWidth:1 };
+  if(type === 'rect') el = { id:newId('el'), type:'rect', x:20, y:20, width:60, height:40, fill:'#ffffff', stroke:'#171614' };
   state.elements.push(el);
   state.selectedIds = new Set([el.id]);
   render();
@@ -646,8 +861,8 @@ function onPageMouseDown(e){
   } else {
     const pxPerMm = getPxPerMm();
     const pageRect = document.getElementById('page').getBoundingClientRect();
-    const startXmm = (e.clientX - pageRect.left) / pxPerMm;
-    const startYmm = (e.clientY - pageRect.top) / pxPerMm;
+    const startXmm = (e.clientX - pageRect.left) / (pxPerMm * state.zoom);
+    const startYmm = (e.clientY - pageRect.top) / (pxPerMm * state.zoom);
     if(!e.shiftKey && state.selectedIds.size){ state.selectedIds = new Set(); render(); }
     const box = document.createElement('div');
     box.className = 'marquee-box no-print';
@@ -662,8 +877,8 @@ document.addEventListener('mousemove', e => {
   if(interaction.mode === 'marquee'){
     const pxPerMm = getPxPerMm();
     const pageRect = document.getElementById('page').getBoundingClientRect();
-    interaction.curXmm = (e.clientX - pageRect.left) / pxPerMm;
-    interaction.curYmm = (e.clientY - pageRect.top) / pxPerMm;
+    interaction.curXmm = (e.clientX - pageRect.left) / (pxPerMm * state.zoom);
+    interaction.curYmm = (e.clientY - pageRect.top) / (pxPerMm * state.zoom);
     const left = Math.min(interaction.startXmm, interaction.curXmm);
     const top = Math.min(interaction.startYmm, interaction.curYmm);
     const w = Math.abs(interaction.curXmm - interaction.startXmm);
@@ -693,8 +908,8 @@ document.addEventListener('mousemove', e => {
   const pxPerMm = getPxPerMm();
 
   if(interaction.mode === 'drag'){
-    const dxRaw = (e.clientX - interaction.startClientX) / pxPerMm;
-    const dyRaw = (e.clientY - interaction.startClientY) / pxPerMm;
+    const dxRaw = (e.clientX - interaction.startClientX) / (pxPerMm * state.zoom);
+    const dyRaw = (e.clientY - interaction.startClientY) / (pxPerMm * state.zoom);
     const primary = getEl(interaction.id);
     const primaryStart = interaction.startPositions[interaction.id];
     let snap = { x:null, y:null, guideX:null, guideY:null };
@@ -720,8 +935,8 @@ document.addEventListener('mousemove', e => {
   } else if(interaction.mode === 'resize'){
     const el = getEl(interaction.id);
     if(!el) return;
-    const dx = (e.clientX - interaction.startClientX) / pxPerMm;
-    const dy = (e.clientY - interaction.startClientY) / pxPerMm;
+    const dx = (e.clientX - interaction.startClientX) / (pxPerMm * state.zoom);
+    const dy = (e.clientY - interaction.startClientY) / (pxPerMm * state.zoom);
     el.width = round1(clamp(interaction.startW + dx, 5, state.page.width - el.x));
     if(el.type !== 'line') el.height = round1(clamp(interaction.startH + dy, 5, state.page.height - el.y));
     applyElementStyle(el.id);
@@ -1208,6 +1423,8 @@ cpDropzoneEl.addEventListener('drop', e => {
   if(f) onCreatePhotoSelected(f);
 });
 
+document.querySelector('.canvas-wrapper').addEventListener('wheel', onCanvasWheel, { passive:false });
+
 applyPageCSSVars();
 updatePrintStyle();
 updatePageSub();
@@ -1215,6 +1432,7 @@ syncPageSizeSelect();
 buildRulerLabels();
 refreshUndoRedoButtons();
 render();
+syncZoomLayout();
 
 async function initFromDatabase(){
   if(!db){

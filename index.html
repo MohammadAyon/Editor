@@ -22,6 +22,10 @@
     <div class="topbar-right" id="editorTopbarActions">
       <button class="btn small" id="btnUndo" onclick="undo()" disabled>Undo</button>
       <button class="btn small" id="btnRedo" onclick="redo()" disabled>Redo</button>
+      <button class="btn small zoom-control" onclick="changeZoom(-0.1)" aria-label="Zoom out">-</button>
+      <span class="zoom-readout" id="zoomReadout">100%</span>
+      <button class="btn small zoom-control" onclick="changeZoom(0.1)" aria-label="Zoom in">+</button>
+      <button class="btn small" onclick="resetZoom()">Reset zoom</button>
       <button class="btn primary" onclick="window.print()">Print</button>
     </div>
   </div>
@@ -176,6 +180,7 @@
   </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/konva@10.3.1/konva.min.js"></script>
 <script src="supabase-config.js"></script>
 <script src="app.js"></script>
 </body>

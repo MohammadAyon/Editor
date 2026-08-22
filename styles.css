@@ -28,6 +28,8 @@
   .topbar .sub{font-size:10px;color:var(--gray-500);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:0.1em;white-space:nowrap;}
   .topbar-tabs{flex:0 0 auto;display:flex;gap:28px;}
   .topbar-right{flex:1;display:flex;gap:10px;justify-content:flex-end;}
+  .zoom-readout{min-width:42px;align-self:center;text-align:center;font:10px var(--font-mono);color:var(--gray-500);}
+  .zoom-control{width:28px;padding-left:0;padding-right:0;}
 
   .tab-btn{background:none;border:none;font-family:var(--font-sans);font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--gray-500);padding:22px 0;cursor:pointer;border-bottom:2px solid transparent;transition:color 180ms ease,border-color 180ms ease;}
   .tab-btn:hover{color:var(--ink);}
@@ -84,8 +86,8 @@
   .project-row-meta{font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--gray-500);margin-bottom:10px;}
 
   /* ---------- canvas ---------- */
-  .canvas-wrapper{flex:1;overflow:auto;display:flex;justify-content:center;padding:56px 32px;}
-  .page-frame{position:relative;width:calc(16px + var(--page-w));height:calc(16px + var(--page-h));flex:0 0 auto;transition:width 220ms ease,height 220ms ease;}
+  .canvas-wrapper{flex:1;overflow:auto;display:flex;justify-content:flex-start;padding:56px 32px;}
+  .page-frame{position:relative;width:calc(16px + var(--page-w));height:calc(16px + var(--page-h));flex:0 0 auto;margin-left:auto;margin-right:auto;}
   .ruler-corner{position:absolute;left:0;top:0;width:16px;height:16px;}
   .ruler-top{position:absolute;left:16px;top:0;width:var(--page-w);height:16px;
     background-image:repeating-linear-gradient(to right,var(--gray-300) 0,var(--gray-300) 1px,transparent 1px,transparent 10mm);
@@ -96,6 +98,10 @@
   .ruler-label{position:absolute;font-size:9px;color:var(--gray-300);font-family:var(--font-mono);}
 
   #page{position:absolute;left:16px;top:16px;width:var(--page-w);height:var(--page-h);background:#fff;border:1px solid var(--border);box-shadow:0 1px 3px rgba(23,22,20,.05);overflow:hidden;transition:width 220ms ease,height 220ms ease;}
+  #page.konva-editor-active>.element,#page.konva-editor-active>.selection-overlay,#page.konva-editor-active>.selection-bbox{visibility:hidden;}
+  .konva-editor-layer{position:absolute;inset:0;z-index:5;}
+  .konva-editor-layer canvas{display:block;}
+  #page{transform-origin:0 0;}
 
   .element{position:absolute;cursor:move;}
   .element.marquee-hit{outline:1px dashed var(--ink);outline-offset:1px;}
