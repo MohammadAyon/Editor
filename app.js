@@ -97,6 +97,7 @@ const state = {
 let presets = loadFromStorage(LS_KEYS.presets) || [];
 let brandImages = loadFromStorage(LS_KEYS.brandImages) || [];
 let projects = loadFromStorage(LS_KEYS.projects) || [];
+let editingPresetId = null;
 const createData = { projectName:'Riverside Residence', location:'Chattogram, Bangladesh', clientName:'John Smith', projectImage:null, projectImageFile:null };
 
 let interaction = null;
@@ -133,6 +134,19 @@ function updateSelectionOverlayPosition(id){
   if(!el || !overlay) return;
   overlay.style.left = el.x + 'mm';
   overlay.style.top = el.y + 'mm';
+}
+
+function getStagePointer(nativeEvent){
+  if(konvaStage && nativeEvent) konvaStage.setPointersPositions(nativeEvent);
+  const pointer = konvaStage && konvaStage.getPointerPosition();
+  if(pointer) return pointer;
+  const canvas = document.querySelector('.konva-editor-layer canvas');
+  const rect = canvas && canvas.getBoundingClientRect();
+  if(!rect || !konvaStage) return null;
+  return {
+    x:(nativeEvent.clientX - rect.left) * konvaStage.width() / rect.width,
+    y:(nativeEvent.clientY - rect.top) * konvaStage.height() / rect.height
+  };
 }
 
 function resizeSnapBox(oldBox, newBox, selectedElement){
@@ -363,7 +377,7 @@ function elementHTML(el, dataSource){
     return `<div class="element el-image el-image-empty" data-id="${el.id}" data-role="${el.role||'photo'}" style="${style}"><span class="no-print">${label}</span></div>`;
   }
   if(el.type === 'line') return `<div class="element el-line" data-id="${el.id}" style="${style}border-top-color:${lineStroke(el)};border-top-width:${lineWidth(el)}px;"></div>`;
-  if(el.type === 'rect') return `<div class="element el-rect" data-id="${el.id}" style="${style}background-color:${rectFill(el)};border-color:${rectStroke(el)};border-width:${Number(el.strokeWidth) || 1}px;"></div>`;
+  if(el.type === 'rect') return `<div class="element el-rect" data-id="${el.id}" style="${style}"><svg aria-hidden="true" width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none"><rect x="0" y="0" width="100" height="100" fill="${escapeHtml(rectFill(el))}" stroke="${escapeHtml(rectStroke(el))}" stroke-width="${Number(el.strokeWidth) || 1}" vector-effect="non-scaling-stroke" stroke-linejoin="${el.lineJoin || 'miter'}"></rect></svg></div>`;
   return '';
 }
 
@@ -407,7 +421,9 @@ function makeKonvaNode(el){
   if(el.type === 'text'){
     node = new Konva.Text({ text:konvaTextValue(el), x:x + width / 2, y:y + visualHeight / 2, offsetX:width / 2, offsetY:visualHeight / 2, width, height, fontSize:el.fontSize, fontFamily:el.variant === 'display' ? 'Fraunces' : 'Inter', fontStyle:el.weight >= 600 ? 'bold' : 'normal', fill:'#171614', align:el.align, listening:true });
   } else if(el.type === 'line'){
-    node = new Konva.Line({ x:x + width / 2, y:y + visualHeight / 2, offsetX:width / 2, offsetY:visualHeight / 2, points:[0, 1, width, 1], stroke:lineStroke(el), strokeWidth:lineWidth(el), lineJoin:el.lineJoin || 'miter', listening:true });
+    node = new Konva.Group({ x:x + width / 2, y:y + visualHeight / 2, offsetX:width / 2, offsetY:visualHeight / 2, width, height:visualHeight, listening:true });
+    node.add(new Konva.Rect({ x:0, y:-6, width, height:12, fill:'#000000', opacity:0.01, listening:true }));
+    node.add(new Konva.Line({ points:[0, 0, width, 0], stroke:lineStroke(el), strokeWidth:lineWidth(el), lineJoin:el.lineJoin || 'miter', listening:false }));
   } else if(el.type === 'rect'){
     node = new Konva.Rect({ x:x + width / 2, y:y + visualHeight / 2, offsetX:width / 2, offsetY:visualHeight / 2, width, height, fill:rectFill(el), stroke:rectStroke(el), strokeWidth:Number(el.strokeWidth) || 1, lineJoin:el.lineJoin || 'miter', listening:true });
   } else {
@@ -432,16 +448,28 @@ function makeKonvaNode(el){
     node.shadowOffset({ x:Number(el.shadowOffsetX) || 0, y:Number(el.shadowOffsetY) || 0 });
     node.shadowOpacity(Number.isFinite(el.shadowOpacity) ? el.shadowOpacity : 0);
   }
-  node.draggable(false);
-  node.on('mousedown', event => {
+  node.draggable(el.type === 'line');
+  if(el.type === 'line'){
+    node.on('dragmove', event => {
+      const position = event.target.position();
+      el.x = round1(position.x / getPxPerMm() - el.width / 2);
+      el.y = round1(position.y / getPxPerMm() - heightOf(el) / 2);
+      updateSchemaView();
+    });
+    node.on('dragend', () => render());
+  }
+  const dragStartNode = el.type === 'line' ? node.children[0] : node;
+  dragStartNode.on('mousedown', event => {
     const native = event.evt;
     native.stopPropagation();
-    const pointer = konvaStage.getPointerPosition();
+    event.cancelBubble = true;
+    const pointer = getStagePointer(native) || node.position();
     if(native.shiftKey){
       const next = new Set(state.selectedIds);
       if(next.has(el.id)) next.delete(el.id); else next.add(el.id);
       state.selectedIds = next;
     } else if(!state.selectedIds.has(el.id)) state.selectedIds = new Set([el.id]);
+    if(el.type === 'line') return;
     render();
     if(!state.selectedIds.has(el.id)) return;
     konvaDragState = { id:el.id, startX:pointer.x, startY:pointer.y, positions:Object.fromEntries([...state.selectedIds].map(id => { const selected = getEl(id); return [id, { x:selected.x, y:selected.y }]; })) };
@@ -463,9 +491,29 @@ function renderKonva(){
     konvaStage.add(konvaLayer);
     konvaStage.add(konvaGuideLayer);
     konvaStage.on('mousedown', event => {
-      if(event.target !== konvaStage) return;
+      if(event.target !== konvaStage){
+        let target = event.target;
+        while(target && target !== konvaStage && !target.id()) target = target.getParent();
+        const id = target && target !== konvaStage ? target.id() : null;
+        const el = id && getEl(id);
+        if(!el) return;
+        event.evt.stopPropagation();
+        event.cancelBubble = true;
+        const pointer = getStagePointer(event.evt) || target.position();
+        if(event.evt.shiftKey){
+          const next = new Set(state.selectedIds);
+          if(next.has(id)) next.delete(id); else next.add(id);
+          state.selectedIds = next;
+        } else if(!state.selectedIds.has(id)) state.selectedIds = new Set([id]);
+        render();
+        if(!state.selectedIds.has(id)) return;
+        konvaDragState = { id, startX:pointer.x, startY:pointer.y, positions:Object.fromEntries([...state.selectedIds].map(selectedId => { const selected = getEl(selectedId); return [selectedId, { x:selected.x, y:selected.y }]; })) };
+        pushUndo();
+        return;
+      }
       event.evt.stopPropagation();
-      const pointer = konvaStage.getPointerPosition();
+      const pointer = getStagePointer(event.evt);
+      if(!pointer) return;
       const page = document.getElementById('page');
       const box = document.createElement('div');
       box.className = 'marquee-box no-print';
@@ -473,9 +521,10 @@ function renderKonva(){
       konvaMarqueeState = { startX:pointer.x, startY:pointer.y, baseSelection:event.evt.shiftKey ? new Set(state.selectedIds) : new Set(), box };
       if(!event.evt.shiftKey) state.selectedIds = new Set();
     });
-    konvaStage.on('mousemove', () => {
+    konvaStage.on('mousemove', event => {
       if(konvaMarqueeState){
-        const pointer = konvaStage.getPointerPosition();
+        const pointer = getStagePointer(event.evt);
+        if(!pointer) return;
         const left = Math.min(konvaMarqueeState.startX, pointer.x);
         const top = Math.min(konvaMarqueeState.startY, pointer.y);
         const width = Math.abs(pointer.x - konvaMarqueeState.startX);
@@ -488,14 +537,15 @@ function renderKonva(){
         return;
       }
       if(!konvaDragState) return;
-      const pointer = konvaStage.getPointerPosition();
+      const pointer = getStagePointer(event.evt);
+      if(!pointer) return;
       const dx = (pointer.x - konvaDragState.startX) / getPxPerMm();
       const dy = (pointer.y - konvaDragState.startY) / getPxPerMm();
       Object.entries(konvaDragState.positions).forEach(([id, start]) => {
         const el = getEl(id);
         if(!el) return;
-        el.x = round1(clamp(start.x + dx, 0, state.page.width - el.width));
-        el.y = round1(clamp(start.y + dy, 0, state.page.height - heightOf(el)));
+        el.x = round1(start.x + dx);
+        el.y = round1(start.y + dy);
         const node = konvaLayer.findOne('#' + id);
         if(node){ node.x(mmToPx(el.x + el.width / 2)); node.y(mmToPx(el.y + heightOf(el) / 2)); }
       });
@@ -504,7 +554,8 @@ function renderKonva(){
     });
     konvaStage.on('mouseup', () => {
       if(konvaMarqueeState){
-        const pointer = konvaStage.getPointerPosition();
+        const pointer = getStagePointer(event.evt);
+        if(!pointer) return;
         const pxPerMm = getPxPerMm();
         const rect = {
           left:Math.min(konvaMarqueeState.startX, pointer.x) / pxPerMm,
@@ -705,6 +756,18 @@ function applyElementStyle(id){
   node.style.top = el.y + 'mm';
   node.style.width = el.width + 'mm';
   if(el.type !== 'line') node.style.height = el.height + 'mm';
+  node.style.opacity = Number.isFinite(el.opacity) ? el.opacity : 1;
+  node.style.transform = `rotate(${Number(el.rotation) || 0}deg) scale(${el.flipX ? -1 : 1},${el.flipY ? -1 : 1})`;
+  node.style.transformOrigin = 'center';
+  if(el.type === 'rect'){
+    node.style.backgroundColor = rectFill(el);
+    node.style.borderColor = rectStroke(el);
+    node.style.borderWidth = (Number(el.strokeWidth) || 1) + 'px';
+  }
+  if(el.type === 'line'){
+    node.style.borderTopColor = lineStroke(el);
+    node.style.borderTopWidth = lineWidth(el) + 'px';
+  }
   if(el.type === 'text'){
     node.style.fontSize = el.fontSize + 'px';
     node.style.fontWeight = el.weight;
@@ -725,7 +788,12 @@ function applyElementStyle(id){
     if(state.selectedIds.size === 1) syncInspectorNumbers(id);
     if(state.selectedIds.size > 1) updateSelectionBBox();
   }
-  renderKonva();
+  if(el.type === 'line'){
+    updateKonvaNodePosition(id);
+    if(konvaLayer) konvaLayer.batchDraw();
+  } else {
+    renderKonva();
+  }
 }
 
 function updateSelectionBBox(){
@@ -819,7 +887,7 @@ function addElement(type){
   if(type === 'text') el = { id:newId('el'), type:'text', field:null, content:'New text', x:20, y:20, width:60, height:10, fontSize:12, weight:400, align:'left', variant:'body' };
   if(type === 'image') el = { id:newId('el'), type:'image', role:'photo', field:null, x:20, y:20, width:60, height:60, src:null };
   if(type === 'logo') el = { id:newId('el'), type:'image', role:'logo', logoRef: brandImages.length ? brandImages[0].id : null, x:20, y:20, width:40, height:40 };
-  if(type === 'line') el = { id:newId('el'), type:'line', x:20, y:20, width:100, height:0, stroke:'#171614', strokeWidth:1 };
+  if(type === 'line') el = { id:newId('el'), type:'line', x:20, y:Math.min(260, state.page.height - 20), width:100, height:0, stroke:'#171614', strokeWidth:1 };
   if(type === 'rect') el = { id:newId('el'), type:'rect', x:20, y:20, width:60, height:40, fill:'#ffffff', stroke:'#171614' };
   state.elements.push(el);
   state.selectedIds = new Set([el.id]);
@@ -951,15 +1019,13 @@ function distributeSelection(axis){
 
 // ---------- snapping ----------
 function computeSnap(el, proposedX, proposedY, excludeIds){
-  const threshold = 1.5;
+  const threshold = 5;
   const exclude = new Set(excludeIds || [el.id]);
   const pxPerMm = getPxPerMm();
   const stageWidth = state.page.width * pxPerMm;
   const stageHeight = state.page.height * pxPerMm;
   const node = konvaLayer && konvaLayer.findOne('#' + el.id);
-  const visualWidth = el.width * pxPerMm;
-  const visualHeight = heightOf(el) * pxPerMm;
-  const nodeBox = node ? node.getClientRect({ skipTransform: false }) : { x:el.x * pxPerMm, y:el.y * pxPerMm, width:visualWidth, height:visualHeight };
+  const nodeBox = node ? node.getClientRect({ skipTransform:false }) : { x:el.x * pxPerMm, y:el.y * pxPerMm, width:el.width * pxPerMm, height:heightOf(el) * pxPerMm };
   const proposedBox = { ...nodeBox, x:nodeBox.x + (proposedX - el.x) * pxPerMm, y:nodeBox.y + (proposedY - el.y) * pxPerMm };
   const vertical = [0, stageWidth / 2, stageWidth];
   const horizontal = [0, stageHeight / 2, stageHeight];
@@ -971,7 +1037,7 @@ function computeSnap(el, proposedX, proposedY, excludeIds){
     horizontal.push(box.y, box.y + box.height / 2, box.y + box.height);
   });
   const candidates = (values, points) => values.flatMap(line => points.map(point => ({ line, point, diff:Math.abs(line - point.guide) })))
-    .filter(candidate => candidate.diff <= threshold * pxPerMm)
+    .filter(candidate => candidate.diff <= threshold)
     .sort((a,b) => a.diff - b.diff);
   const xPoints = [
     { guide:proposedBox.x, offset:proposedBox.x - nodeBox.x },
@@ -995,7 +1061,7 @@ function computeSnap(el, proposedX, proposedY, excludeIds){
 function showGuideV(xmm){
   if(!konvaGuideLayer) return;
   konvaGuideLayer.find('.snap-guide-v').forEach(line => line.destroy());
-  guideVEl = new Konva.Line({ points:[mmToPx(xmm),0,mmToPx(xmm),mmToPx(state.page.height)], stroke:'#A8341F', strokeWidth:1, dash:[4,6], name:'snap-guide-v', listening:false });
+  guideVEl = new Konva.Line({ points:[mmToPx(xmm),0,mmToPx(xmm),mmToPx(state.page.height)], stroke:'rgb(0, 161, 255)', strokeWidth:1, dash:[4,6], name:'snap-guide-v', listening:false });
   konvaGuideLayer.add(guideVEl);
   konvaGuideLayer.batchDraw();
 }
@@ -1003,7 +1069,7 @@ function hideGuideV(){ if(guideVEl){ guideVEl.destroy(); guideVEl = null; if(kon
 function showGuideH(ymm){
   if(!konvaGuideLayer) return;
   konvaGuideLayer.find('.snap-guide-h').forEach(line => line.destroy());
-  guideHEl = new Konva.Line({ points:[0,mmToPx(ymm),mmToPx(state.page.width),mmToPx(ymm)], stroke:'#A8341F', strokeWidth:1, dash:[4,6], name:'snap-guide-h', listening:false });
+  guideHEl = new Konva.Line({ points:[0,mmToPx(ymm),mmToPx(state.page.width),mmToPx(ymm)], stroke:'rgb(0, 161, 255)', strokeWidth:1, dash:[4,6], name:'snap-guide-h', listening:false });
   konvaGuideLayer.add(guideHEl);
   konvaGuideLayer.batchDraw();
 }
@@ -1100,9 +1166,8 @@ document.addEventListener('mousemove', e => {
       const el = getEl(id);
       const start = interaction.startPositions[id];
       if(!el || !start) return;
-      const nx = clamp(start.x + dxRaw + snapDX, 0, state.page.width - el.width);
-      const ny = clamp(start.y + dyRaw + snapDY, 0, state.page.height - heightOf(el));
-      el.x = round1(nx); el.y = round1(ny);
+      el.x = round1(start.x + dxRaw + snapDX);
+      el.y = round1(start.y + dyRaw + snapDY);
       updateKonvaNodePosition(id);
       updateSelectionOverlayPosition(id);
     });
@@ -1225,8 +1290,8 @@ document.addEventListener('keydown', e => {
     if(e.key === 'ArrowDown') dy = step;
     state.selectedIds.forEach(id => {
       const el = getEl(id); if(!el) return;
-      el.x = round1(clamp(el.x + dx, 0, state.page.width - el.width));
-      el.y = round1(clamp(el.y + dy, 0, state.page.height - heightOf(el)));
+      el.x = round1(el.x + dx);
+      el.y = round1(el.y + dy);
     });
     renderPage();
     updateSchemaView();
@@ -1406,6 +1471,41 @@ async function saveCurrentAsPreset(){
   renderCreatePreview();
   alert(`Saved "${name}" — it's now selectable on the Create project tab.`);
 }
+function loadPresetForEditing(id){
+  const preset = presets.find(item => item.id === id);
+  if(!preset) return;
+  editingPresetId = preset.id;
+  state.page = JSON.parse(JSON.stringify(preset.page));
+  state.elements = JSON.parse(JSON.stringify(preset.elements));
+  state.data.clientName = preset.clientName || state.data.clientName;
+  state.selectedIds = new Set();
+  undoStack.length = 0;
+  redoStack.length = 0;
+  applyPageCSSVars();
+  updatePrintStyle();
+  updatePageSub();
+  syncPageSizeSelect();
+  buildRulerLabels();
+  render();
+  switchTab('editor');
+  renderSavedPresetsList();
+}
+async function updateLoadedPreset(){
+  const preset = presets.find(item => item.id === editingPresetId);
+  if(!preset) return;
+  const updated = { ...preset, clientName:state.data.clientName, page:JSON.parse(JSON.stringify(state.page)), elements:JSON.parse(JSON.stringify(state.elements)) };
+  if(db){
+    const { error } = await db.from('presets').update(presetToRow(updated)).eq('id', preset.id);
+    if(error){ alert('Could not update this preset: ' + error.message); return; }
+  }
+  const index = presets.findIndex(item => item.id === preset.id);
+  if(index >= 0) presets[index] = updated;
+  saveToStorage(LS_KEYS.presets, presets);
+  renderSavedPresetsList();
+  refreshPresetSelect();
+  renderCreatePreview();
+  alert(`Updated "${updated.name}".`);
+}
 async function deletePreset(id){
   presets = presets.filter(p => p.id !== id);
   saveToStorage(LS_KEYS.presets, presets);
@@ -1423,6 +1523,7 @@ function renderSavedPresetsList(){
   box.innerHTML = presets.map(p => `
     <div class="brand-row">
       <span class="brand-name">${escapeHtml(p.name)}${p.clientName ? ` · ${escapeHtml(p.clientName)}` : ''}</span>
+      <button class="btn tiny" onclick="loadPresetForEditing('${p.id}')">Edit</button>
       <button class="btn tiny danger" onclick="deletePreset('${p.id}')">Remove</button>
     </div>`).join('');
 }
@@ -1594,6 +1695,7 @@ function switchTab(tab){
   document.getElementById('tabBtnCreate').classList.toggle('active', tab === 'create');
   document.getElementById('editorTopbarActions').style.display = tab === 'editor' ? 'flex' : 'none';
   if(tab === 'editor'){
+    render();
     updatePrintStyle();
   } else {
     refreshPresetSelect();
@@ -1704,6 +1806,7 @@ function finishDataInit(){
   refreshPresetSelect();
   renderCreatePreview();
   render();
+  switchTab('create');
 }
 
 function showAuthGate(){
