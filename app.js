@@ -35,20 +35,25 @@ const db = (window.SUPABASE_CONFIG && window.supabase)
   ? window.supabase.createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.anonKey)
   : null;
 const COVER_BUCKET = 'cover-images';
-const COVER_PUBLIC_PREFIX = db ? `${window.SUPABASE_CONFIG.url}/storage/v1/object/public/${COVER_BUCKET}/` : '';
+let currentSession = null;
+let databaseInitRun = 0;
+
+function currentUserId(){ return currentSession && currentSession.user ? currentSession.user.id : null; }
 
 async function uploadCoverImage(file, folder){
   const ext = file.name && file.name.includes('.') ? file.name.split('.').pop() : 'png';
   const path = `${folder}/${crypto.randomUUID()}.${ext}`;
   const { error } = await db.storage.from(COVER_BUCKET).upload(path, file, { cacheControl:'3600', upsert:false });
   if(error) throw error;
-  return db.storage.from(COVER_BUCKET).getPublicUrl(path).data.publicUrl;
+  return path;
 }
-function storagePathFromUrl(url){
-  return (url && url.startsWith(COVER_PUBLIC_PREFIX)) ? url.slice(COVER_PUBLIC_PREFIX.length) : null;
+async function signedCoverImageUrl(path, expiresInSeconds){
+  if(!path || !db) return null;
+  const { data, error } = await db.storage.from(COVER_BUCKET).createSignedUrl(path, expiresInSeconds || 60 * 60 * 24);
+  if(error){ console.warn('Could not sign image URL', error); return null; }
+  return data.signedUrl;
 }
-async function deleteCoverImage(url){
-  const path = storagePathFromUrl(url);
+async function deleteCoverImage(path){
   if(!path) return;
   try{ await db.storage.from(COVER_BUCKET).remove([path]); }
   catch(err){ console.warn('Could not delete stored image', err); }
@@ -58,15 +63,15 @@ function presetFromRow(row){
   return { id: row.id, name: row.name, clientName: row.client_name || '', page: row.page, elements: row.elements };
 }
 function presetToRow(preset){
-  return { name: preset.name, client_name: preset.clientName || null, page: preset.page, elements: preset.elements };
+  return { name: preset.name, client_name: preset.clientName || null, page: preset.page, elements: preset.elements, owner_id: currentUserId() };
 }
 function brandImageFromRow(row){
-  return { id: row.id, dbId: row.id, name: row.name, dataUrl: row.image_url };
+  return { id: row.id, dbId: row.id, name: row.name, storagePath: row.image_url, dataUrl: null };
 }
 function projectFromRow(row){
   return {
     id: row.id, dbId: row.id, projectName: row.project_name, location: row.location, clientName: row.client_name,
-    projectImage: row.project_image_url, presetId: row.preset_id, presetName: row.preset_name,
+    projectImage: null, projectImagePath: row.project_image_url, presetId: row.preset_id, presetName: row.preset_name,
     presetSnapshot: row.preset_snapshot, createdAt: row.created_at
   };
 }
@@ -99,9 +104,89 @@ let suppressClick = false;
 let guideVEl = null, guideHEl = null;
 let undoStack = [], redoStack = [];
 let lastEditKey = null, lastEditTime = 0;
-let konvaStage = null, konvaLayer = null, konvaTransformer = null;
+let konvaStage = null, konvaLayer = null, konvaGuideLayer = null, konvaTransformer = null;
 let konvaDragState = null;
 let konvaMarqueeState = null;
+
+function cancelInteraction(){
+  if(interaction && interaction.boxEl) interaction.boxEl.remove();
+  if(konvaMarqueeState && konvaMarqueeState.box) konvaMarqueeState.box.remove();
+  interaction = null;
+  konvaDragState = null;
+  konvaMarqueeState = null;
+  hideGuideV();
+  hideGuideH();
+}
+
+function updateKonvaNodePosition(id){
+  if(!konvaLayer) return;
+  const el = getEl(id);
+  const node = el && konvaLayer.findOne('#' + id);
+  if(!el || !node) return;
+  node.x(mmToPx(el.x + el.width / 2));
+  node.y(mmToPx(el.y + heightOf(el) / 2));
+}
+
+function updateSelectionOverlayPosition(id){
+  const el = getEl(id);
+  const overlay = el && document.querySelector(`.selection-overlay[data-id="${id}"]`);
+  if(!el || !overlay) return;
+  overlay.style.left = el.x + 'mm';
+  overlay.style.top = el.y + 'mm';
+}
+
+function resizeSnapBox(oldBox, newBox, selectedElement){
+  const minWidth = mmToPx(5);
+  const minHeight = selectedElement && selectedElement.type === 'line' ? mmToPx(2) : mmToPx(5);
+  if(newBox.width < minWidth || newBox.height < minHeight) return oldBox;
+
+  const rotation = Math.abs(Number(selectedElement && selectedElement.rotation) || 0) % 180;
+  if(rotation > 0.1 && rotation < 179.9) return newBox;
+
+  const threshold = mmToPx(1.5);
+  const selectedId = selectedElement && selectedElement.id;
+  const xCandidates = [0, state.page.width].map(mmToPx);
+  const yCandidates = [0, state.page.height].map(mmToPx);
+  state.elements.forEach(element => {
+    if(element.id === selectedId) return;
+    xCandidates.push(mmToPx(element.x), mmToPx(element.x + element.width));
+    yCandidates.push(mmToPx(element.y), mmToPx(element.y + heightOf(element)));
+  });
+
+  const result = { ...newBox };
+  const leftAnchored = Math.abs(newBox.x - oldBox.x) > 0.5;
+  const topAnchored = Math.abs(newBox.y - oldBox.y) > 0.5;
+  const right = newBox.x + newBox.width;
+  const bottom = newBox.y + newBox.height;
+  const nearest = (value, candidates) => {
+    let match = null;
+    candidates.forEach(candidate => {
+      if(Math.abs(value - candidate) <= threshold && (!match || Math.abs(value - candidate) < Math.abs(value - match))) match = candidate;
+    });
+    return match;
+  };
+  const leftSnap = leftAnchored ? nearest(newBox.x, xCandidates) : null;
+  const rightSnap = leftAnchored ? null : nearest(right, xCandidates);
+  const topSnap = topAnchored ? nearest(newBox.y, yCandidates) : null;
+  const bottomSnap = topAnchored ? null : nearest(bottom, yCandidates);
+  if(leftSnap != null){ result.width += result.x - leftSnap; result.x = leftSnap; }
+  if(rightSnap != null) result.width = rightSnap - result.x;
+  if(topSnap != null){ result.height += result.y - topSnap; result.y = topSnap; }
+  if(bottomSnap != null) result.height = bottomSnap - result.y;
+  if(result.width < minWidth || result.height < minHeight) return oldBox;
+  return result;
+}
+
+if(location.hostname === 'localhost' || location.hostname === '127.0.0.1'){
+  window.getEditorDiagnostics = () => ({
+    stageNodes: konvaStage ? Array.from(konvaStage.getChildren()).reduce((count, layer) => count + 1 + layer.getChildren().length, 0) : 0,
+    layerCount: konvaStage ? konvaStage.getLayers().length : 0,
+    designObjectCount: state.elements.length,
+    guideHelperCount: (konvaGuideLayer ? konvaGuideLayer.getChildren().length : 0) + document.querySelectorAll('.marquee-box, .selection-overlay, .selection-bbox').length,
+    transformerCount: konvaStage ? konvaStage.find('Transformer').length : 0,
+    activeInteraction: interaction ? interaction.mode : null
+  });
+}
 
 // ---------- page size / orientation ----------
 function applyPageCSSVars(){
@@ -152,7 +237,12 @@ function syncPageSizeSelect(){
 function getEl(id){ return state.elements.find(e => e.id === id); }
 function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
 function round1(v){ return Math.round(v*10)/10; }
-function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function sanitizeImageSrc(src){
+  if(typeof src !== 'string' || !src) return null;
+  if(/^data:image\//i.test(src) || /^blob:/i.test(src) || /^https:\/\//i.test(src)) return src;
+  return null;
+}
 function getPxPerMm(){
   const page = document.getElementById('page');
   return page.getBoundingClientRect().width / (state.page.width * state.zoom);
@@ -252,13 +342,14 @@ function refreshUndoRedoButtons(){
 function resolveImageSrc(el, dataSource){
   if(el.role === 'logo'){
     const brand = brandImages.find(b => b.id === el.logoRef);
-    return brand ? brand.dataUrl : null;
+    return brand ? sanitizeImageSrc(brand.dataUrl) : null;
   }
-  return el.field ? ((dataSource || state.data)[el.field] || el.src) : el.src;
+  return sanitizeImageSrc(el.field ? ((dataSource || state.data)[el.field] || el.src) : el.src);
 }
 function elementHTML(el, dataSource){
   dataSource = dataSource || state.data;
-  const style = `left:${el.x}mm;top:${el.y}mm;width:${el.width}mm;` + (el.type !== 'line' ? `height:${el.height}mm;` : '');
+  const flip = `scale(${el.flipX ? -1 : 1},${el.flipY ? -1 : 1})`;
+  const style = `left:${el.x}mm;top:${el.y}mm;width:${el.width}mm;` + (el.type !== 'line' ? `height:${el.height}mm;` : '') + `opacity:${Number.isFinite(el.opacity) ? el.opacity : 1};transform:rotate(${Number(el.rotation) || 0}deg) ${flip};transform-origin:center;`;
   if(el.type === 'text'){
     const value = el.field ? (dataSource[el.field] || '') : (el.content || '');
     const text = (el.prefix || '') + value;
@@ -267,12 +358,12 @@ function elementHTML(el, dataSource){
   }
   if(el.type === 'image'){
     const src = resolveImageSrc(el, dataSource);
-    if(src) return `<div class="element el-image" data-id="${el.id}" data-role="${el.role||'photo'}" style="${style}"><img src="${src}" draggable="false"></div>`;
+    if(src) return `<div class="element el-image" data-id="${escapeHtml(el.id)}" data-role="${escapeHtml(el.role||'photo')}" style="${style}"><img src="${escapeHtml(src)}" draggable="false"></div>`;
     const label = el.role === 'logo' ? 'Pick a logo in the inspector' : 'Click to add image';
     return `<div class="element el-image el-image-empty" data-id="${el.id}" data-role="${el.role||'photo'}" style="${style}"><span class="no-print">${label}</span></div>`;
   }
   if(el.type === 'line') return `<div class="element el-line" data-id="${el.id}" style="${style}border-top-color:${lineStroke(el)};border-top-width:${lineWidth(el)}px;"></div>`;
-  if(el.type === 'rect') return `<div class="element el-rect" data-id="${el.id}" style="${style}background-color:${rectFill(el)};border-color:${rectStroke(el)};"></div>`;
+  if(el.type === 'rect') return `<div class="element el-rect" data-id="${el.id}" style="${style}background-color:${rectFill(el)};border-color:${rectStroke(el)};border-width:${Number(el.strokeWidth) || 1}px;"></div>`;
   return '';
 }
 
@@ -298,9 +389,9 @@ function overlayHTML(){
 }
 
 function renderPage(){
-  guideVEl = null; guideHEl = null;
+  cancelInteraction();
   const page = document.getElementById('page');
-  if(konvaStage){ konvaStage.destroy(); konvaStage = null; konvaLayer = null; konvaTransformer = null; }
+  if(konvaStage){ konvaStage.destroy(); konvaStage = null; konvaLayer = null; konvaGuideLayer = null; konvaTransformer = null; }
   page.innerHTML = state.elements.map(el => elementHTML(el)).join('') + overlayHTML();
   page.classList.add('konva-editor-active');
   renderKonva();
@@ -311,15 +402,16 @@ function mmToPx(mm){ return mm * getPxPerMm(); }
 function konvaTextValue(el){ return (el.prefix || '') + (el.field ? (state.data[el.field] || '') : (el.content || '')); }
 function makeKonvaNode(el){
   const x = mmToPx(el.x), y = mmToPx(el.y), width = mmToPx(el.width), height = mmToPx(el.type === 'line' ? 2 : el.height);
+  const visualHeight = height;
   let node;
   if(el.type === 'text'){
-    node = new Konva.Text({ text:konvaTextValue(el), x, y, width, height, fontSize:el.fontSize, fontFamily:el.variant === 'display' ? 'Fraunces' : 'Inter', fontStyle:el.weight >= 600 ? 'bold' : 'normal', fill:'#171614', align:el.align, listening:true });
+    node = new Konva.Text({ text:konvaTextValue(el), x:x + width / 2, y:y + visualHeight / 2, offsetX:width / 2, offsetY:visualHeight / 2, width, height, fontSize:el.fontSize, fontFamily:el.variant === 'display' ? 'Fraunces' : 'Inter', fontStyle:el.weight >= 600 ? 'bold' : 'normal', fill:'#171614', align:el.align, listening:true });
   } else if(el.type === 'line'){
-    node = new Konva.Line({ x, y, points:[0, 1, width, 1], stroke:lineStroke(el), strokeWidth:lineWidth(el), listening:true });
+    node = new Konva.Line({ x:x + width / 2, y:y + visualHeight / 2, offsetX:width / 2, offsetY:visualHeight / 2, points:[0, 1, width, 1], stroke:lineStroke(el), strokeWidth:lineWidth(el), lineJoin:el.lineJoin || 'miter', listening:true });
   } else if(el.type === 'rect'){
-    node = new Konva.Rect({ x, y, width, height, fill:rectFill(el), stroke:rectStroke(el), strokeWidth:1, listening:true });
+    node = new Konva.Rect({ x:x + width / 2, y:y + visualHeight / 2, offsetX:width / 2, offsetY:visualHeight / 2, width, height, fill:rectFill(el), stroke:rectStroke(el), strokeWidth:Number(el.strokeWidth) || 1, lineJoin:el.lineJoin || 'miter', listening:true });
   } else {
-    node = new Konva.Group({ x, y, width, height, listening:true });
+    node = new Konva.Group({ x:x + width / 2, y:y + visualHeight / 2, offsetX:width / 2, offsetY:visualHeight / 2, width, height, listening:true });
     node.add(new Konva.Rect({ x:0, y:0, width, height, fill:'#EEEBE3', stroke:'#B4B0A4', dash:[4,3], listening:true }));
     const src = resolveImageSrc(el);
     if(src){
@@ -331,17 +423,27 @@ function makeKonvaNode(el){
     }
   }
   node.id(el.id);
+  node.rotation(Number(el.rotation) || 0);
+  node.scale({ x:el.flipX ? -1 : 1, y:el.flipY ? -1 : 1 });
+  node.opacity(Number.isFinite(el.opacity) ? el.opacity : 1);
+  if(typeof node.shadowColor === 'function'){
+    node.shadowColor(el.shadowColor || '#171614');
+    node.shadowBlur(Number(el.shadowBlur) || 0);
+    node.shadowOffset({ x:Number(el.shadowOffsetX) || 0, y:Number(el.shadowOffsetY) || 0 });
+    node.shadowOpacity(Number.isFinite(el.shadowOpacity) ? el.shadowOpacity : 0);
+  }
   node.draggable(false);
   node.on('mousedown', event => {
     const native = event.evt;
     native.stopPropagation();
+    const pointer = konvaStage.getPointerPosition();
     if(native.shiftKey){
       const next = new Set(state.selectedIds);
       if(next.has(el.id)) next.delete(el.id); else next.add(el.id);
       state.selectedIds = next;
     } else if(!state.selectedIds.has(el.id)) state.selectedIds = new Set([el.id]);
-    renderInspector();
-    const pointer = konvaStage.getPointerPosition();
+    render();
+    if(!state.selectedIds.has(el.id)) return;
     konvaDragState = { id:el.id, startX:pointer.x, startY:pointer.y, positions:Object.fromEntries([...state.selectedIds].map(id => { const selected = getEl(id); return [id, { x:selected.x, y:selected.y }]; })) };
     pushUndo();
   });
@@ -357,7 +459,9 @@ function renderKonva(){
     page.appendChild(container);
     konvaStage = new Konva.Stage({ container, width:page.clientWidth, height:page.clientHeight });
     konvaLayer = new Konva.Layer();
+    konvaGuideLayer = new Konva.Layer({ listening:false });
     konvaStage.add(konvaLayer);
+    konvaStage.add(konvaGuideLayer);
     konvaStage.on('mousedown', event => {
       if(event.target !== konvaStage) return;
       event.evt.stopPropagation();
@@ -393,7 +497,7 @@ function renderKonva(){
         el.x = round1(clamp(start.x + dx, 0, state.page.width - el.width));
         el.y = round1(clamp(start.y + dy, 0, state.page.height - heightOf(el)));
         const node = konvaLayer.findOne('#' + id);
-        if(node){ node.x(mmToPx(el.x)); node.y(mmToPx(el.y)); }
+        if(node){ node.x(mmToPx(el.x + el.width / 2)); node.y(mmToPx(el.y + heightOf(el) / 2)); }
       });
       konvaLayer.batchDraw();
       updateSchemaView();
@@ -422,25 +526,42 @@ function renderKonva(){
   konvaStage.size({ width:page.clientWidth, height:page.clientHeight });
   konvaLayer.destroyChildren();
   state.elements.forEach(el => konvaLayer.add(makeKonvaNode(el)));
-  konvaTransformer = new Konva.Transformer({ rotateEnabled:false, keepRatio:false, anchorSize:8, borderStroke:'#171614', anchorStroke:'#171614', anchorFill:'#171614', enabledAnchors:['middle-right','bottom-center','bottom-right'] });
+  konvaTransformer = new Konva.Transformer({
+    rotateEnabled:true,
+    keepRatio:false,
+    ignoreStroke:true,
+    anchorSize:8,
+    borderStroke:'#171614',
+    anchorStroke:'#171614',
+    anchorFill:'#171614',
+    enabledAnchors:['top-left','top-right','bottom-left','bottom-right'],
+    boundBoxFunc:(oldBox, newBox) => resizeSnapBox(oldBox, newBox, getEl([...state.selectedIds][0]))
+  });
   const selected = [...state.selectedIds].map(id => konvaLayer.findOne('#' + id)).filter(Boolean);
   if(selected.length === 1){
+    const selectedElement = getEl(selected[0].id());
+    konvaTransformer.keepRatio(selectedElement.type === 'image' ? selectedElement.keepRatio !== false : selectedElement.keepRatio === true);
     konvaTransformer.nodes(selected);
     konvaTransformer.on('transformstart', pushUndo);
     konvaTransformer.on('transformend', () => {
       const node = selected[0], el = getEl(node.id());
       if(!el) return;
       const scaleX = node.scaleX(), scaleY = node.scaleY();
-      el.x = round1(clamp(node.x() / getPxPerMm(), 0, state.page.width - el.width));
-      el.y = round1(clamp(node.y() / getPxPerMm(), 0, state.page.height - heightOf(el)));
-      el.width = round1(clamp(el.width * scaleX, 5, state.page.width - el.x));
-      if(el.type !== 'line') el.height = round1(clamp(el.height * scaleY, 5, state.page.height - el.y));
+      const absScaleX = Math.abs(scaleX), absScaleY = Math.abs(scaleY);
+      el.width = round1(clamp(el.width * absScaleX, 5, state.page.width));
+      if(el.type !== 'line') el.height = round1(clamp(el.height * absScaleY, 5, state.page.height));
+      el.x = round1(clamp(node.x() / getPxPerMm() - el.width / 2, 0, state.page.width - el.width));
+      el.y = round1(clamp(node.y() / getPxPerMm() - heightOf(el) / 2, 0, state.page.height - heightOf(el)));
+      el.rotation = round1(node.rotation());
+      el.flipX = scaleX < 0;
+      el.flipY = scaleY < 0;
       node.scale({ x:1, y:1 });
       render();
     });
     konvaLayer.add(konvaTransformer);
   }
-  konvaLayer.draw();
+  konvaLayer.batchDraw();
+  konvaGuideLayer.batchDraw();
 }
 
 function renderInspector(){
@@ -490,6 +611,9 @@ function renderInspector(){
       }
     }
     if(el.type === 'image'){
+      html += `<div class="field"><label>Aspect ratio</label>
+        <label class="check-row"><input type="checkbox" ${el.keepRatio !== false ? 'checked' : ''} onchange="updateProp('${el.id}','keepRatio',this.checked)"> Lock image ratio</label>
+      </div>`;
       if(el.role === 'logo'){
         html += `<div class="field"><label>Logo</label>
           <select onchange="updateProp('${el.id}','logoRef',this.value)">
@@ -507,15 +631,25 @@ function renderInspector(){
     if(el.type === 'rect'){
       html += `
         <div class="field color-field"><label>Fill</label><input type="color" value="${rectFill(el)}" onchange="updateProp('${el.id}','fill',this.value)"></div>
-        <div class="field color-field"><label>Border</label><input type="color" value="${rectStroke(el)}" onchange="updateProp('${el.id}','stroke',this.value)"></div>`;
+        <div class="field color-field"><label>Border</label><input type="color" value="${rectStroke(el)}" onchange="updateProp('${el.id}','stroke',this.value)"></div>
+        <div class="field"><label>Border width (px)</label><input type="number" min="0" max="20" step="1" value="${el.strokeWidth || 1}" oninput="updateProp('${el.id}','strokeWidth',parseFloat(this.value))"></div>
+        <div class="field"><label>Line join</label><select onchange="updateProp('${el.id}','lineJoin',this.value)">${['miter','round','bevel'].map(v => `<option value="${v}" ${v===(el.lineJoin||'miter')?'selected':''}>${v}</option>`).join('')}</select></div>`;
     }
     if(el.type === 'line'){
       html += `
         <div class="field color-field"><label>Color</label><input type="color" value="${lineStroke(el)}" onchange="updateProp('${el.id}','stroke',this.value)"></div>
-        <div class="field"><label>Thickness (px)</label><input type="number" min="1" max="20" step="1" value="${lineWidth(el)}" oninput="updateProp('${el.id}','strokeWidth',parseFloat(this.value))"></div>`;
+        <div class="field"><label>Thickness (px)</label><input type="number" min="1" max="20" step="1" value="${lineWidth(el)}" oninput="updateProp('${el.id}','strokeWidth',parseFloat(this.value))"></div>
+        <div class="field"><label>Line join</label><select onchange="updateProp('${el.id}','lineJoin',this.value)">${['miter','round','bevel'].map(v => `<option value="${v}" ${v===(el.lineJoin||'miter')?'selected':''}>${v}</option>`).join('')}</select></div>`;
     }
+    html += `<div class="field"><label>Opacity</label><input type="range" min="0" max="1" step="0.05" value="${Number.isFinite(el.opacity) ? el.opacity : 1}" oninput="updateProp('${el.id}','opacity',parseFloat(this.value))"></div>`;
+      html += `<div class="field"><label>Shadow blur</label><input type="number" min="0" max="50" step="1" value="${Number(el.shadowBlur) || 0}" oninput="updateProp('${el.id}','shadowBlur',parseFloat(this.value))"></div>`;
     html += `
       <div class="row-btns" style="margin-top:14px">
+        <button class="btn small" onclick="flipSelection('x')">Flip H</button>
+        <button class="btn small" onclick="flipSelection('y')">Flip V</button>
+        <button class="btn small" onclick="rotateSelection(-90)">Rotate</button>
+        <button class="btn small" onclick="bringSelectionForward()">Forward</button>
+        <button class="btn small" onclick="sendSelectionBackward()">Backward</button>
         <button class="btn small" onclick="bringSelectionToFront()">Front</button>
         <button class="btn small" onclick="sendSelectionToBack()">Back</button>
         <button class="btn small" onclick="duplicateSelection()">Duplicate</button>
@@ -643,6 +777,23 @@ function updateProp(id, prop, value){
   else applyElementStyle(id);
   updateSchemaView();
 }
+
+function flipSelection(axis){
+  const ids = [...state.selectedIds]; if(!ids.length) return;
+  pushUndo();
+  ids.forEach(id => {
+    const el = getEl(id); if(!el) return;
+    const prop = axis === 'x' ? 'flipX' : 'flipY';
+    el[prop] = !el[prop];
+  });
+  render();
+}
+function rotateSelection(delta){
+  const ids = [...state.selectedIds]; if(!ids.length) return;
+  pushUndo();
+  ids.forEach(id => { const el = getEl(id); if(el) el.rotation = ((Number(el.rotation) || 0) + delta) % 360; });
+  render();
+}
 function onDataInput(field, value){
   state.data[field] = value;
   updateBoundElementsContent(field);
@@ -714,6 +865,24 @@ function sendSelectionToBack(){
   state.elements.unshift(...picked);
   render();
 }
+function bringSelectionForward(){
+  const ids = [...state.selectedIds]; if(!ids.length) return;
+  pushUndo();
+  ids.forEach(id => {
+    const index = state.elements.findIndex(e => e.id === id);
+    if(index >= 0 && index < state.elements.length - 1) [state.elements[index], state.elements[index + 1]] = [state.elements[index + 1], state.elements[index]];
+  });
+  render();
+}
+function sendSelectionBackward(){
+  const ids = [...state.selectedIds]; if(!ids.length) return;
+  pushUndo();
+  [...ids].reverse().forEach(id => {
+    const index = state.elements.findIndex(e => e.id === id);
+    if(index > 0) [state.elements[index], state.elements[index - 1]] = [state.elements[index - 1], state.elements[index]];
+  });
+  render();
+}
 function centerSelectionH(){
   const ids = [...state.selectedIds]; if(!ids.length) return;
   pushUndo();
@@ -783,58 +952,66 @@ function distributeSelection(axis){
 // ---------- snapping ----------
 function computeSnap(el, proposedX, proposedY, excludeIds){
   const threshold = 1.5;
-  const w = el.width, h = heightOf(el);
   const exclude = new Set(excludeIds || [el.id]);
-  const candX = [0, state.page.width / 2, state.page.width];
-  const candY = [0, state.page.height / 2, state.page.height];
-  state.elements.forEach(o => {
-    if(exclude.has(o.id)) return;
-    candX.push(o.x, o.x + o.width / 2, o.x + o.width);
-    candY.push(o.y, o.y + heightOf(o) / 2, o.y + heightOf(o));
+  const pxPerMm = getPxPerMm();
+  const stageWidth = state.page.width * pxPerMm;
+  const stageHeight = state.page.height * pxPerMm;
+  const node = konvaLayer && konvaLayer.findOne('#' + el.id);
+  const visualWidth = el.width * pxPerMm;
+  const visualHeight = heightOf(el) * pxPerMm;
+  const nodeBox = node ? node.getClientRect({ skipTransform: false }) : { x:el.x * pxPerMm, y:el.y * pxPerMm, width:visualWidth, height:visualHeight };
+  const proposedBox = { ...nodeBox, x:nodeBox.x + (proposedX - el.x) * pxPerMm, y:nodeBox.y + (proposedY - el.y) * pxPerMm };
+  const vertical = [0, stageWidth / 2, stageWidth];
+  const horizontal = [0, stageHeight / 2, stageHeight];
+  state.elements.forEach(other => {
+    if(exclude.has(other.id)) return;
+    const otherNode = konvaLayer && konvaLayer.findOne('#' + other.id);
+    const box = otherNode ? otherNode.getClientRect({ skipTransform:false }) : { x:other.x * pxPerMm, y:other.y * pxPerMm, width:other.width * pxPerMm, height:heightOf(other) * pxPerMm };
+    vertical.push(box.x, box.x + box.width / 2, box.x + box.width);
+    horizontal.push(box.y, box.y + box.height / 2, box.y + box.height);
   });
-  let snapX = null, guideX = null;
-  outerX:
-  for(const c of candX){
-    const checks = [ {edge:'left', val:proposedX}, {edge:'center', val:proposedX + w/2}, {edge:'right', val:proposedX + w} ];
-    for(const chk of checks){
-      if(Math.abs(chk.val - c) < threshold){
-        snapX = chk.edge === 'left' ? c : chk.edge === 'center' ? c - w/2 : c - w;
-        guideX = c;
-        break outerX;
-      }
-    }
-  }
-  let snapY = null, guideY = null;
-  outerY:
-  for(const c of candY){
-    const checks = [ {edge:'top', val:proposedY}, {edge:'center', val:proposedY + h/2}, {edge:'bottom', val:proposedY + h} ];
-    for(const chk of checks){
-      if(Math.abs(chk.val - c) < threshold){
-        snapY = chk.edge === 'top' ? c : chk.edge === 'center' ? c - h/2 : c - h;
-        guideY = c;
-        break outerY;
-      }
-    }
-  }
-  return { x:snapX, y:snapY, guideX, guideY };
+  const candidates = (values, points) => values.flatMap(line => points.map(point => ({ line, point, diff:Math.abs(line - point.guide) })))
+    .filter(candidate => candidate.diff <= threshold * pxPerMm)
+    .sort((a,b) => a.diff - b.diff);
+  const xPoints = [
+    { guide:proposedBox.x, offset:proposedBox.x - nodeBox.x },
+    { guide:proposedBox.x + proposedBox.width / 2, offset:proposedBox.x + proposedBox.width / 2 - nodeBox.x },
+    { guide:proposedBox.x + proposedBox.width, offset:proposedBox.x + proposedBox.width - nodeBox.x }
+  ];
+  const yPoints = [
+    { guide:proposedBox.y, offset:proposedBox.y - nodeBox.y },
+    { guide:proposedBox.y + proposedBox.height / 2, offset:proposedBox.y + proposedBox.height / 2 - nodeBox.y },
+    { guide:proposedBox.y + proposedBox.height, offset:proposedBox.y + proposedBox.height - nodeBox.y }
+  ];
+  const xMatch = candidates(vertical, xPoints)[0];
+  const yMatch = candidates(horizontal, yPoints)[0];
+  return {
+    x:xMatch ? proposedX + (xMatch.line - xMatch.point.guide) / pxPerMm : null,
+    y:yMatch ? proposedY + (yMatch.line - yMatch.point.guide) / pxPerMm : null,
+    guideX:xMatch ? xMatch.line / pxPerMm : null,
+    guideY:yMatch ? yMatch.line / pxPerMm : null
+  };
 }
 function showGuideV(xmm){
-  if(!guideVEl){ guideVEl = document.createElement('div'); guideVEl.className = 'snap-guide snap-guide-v no-print'; document.getElementById('page').appendChild(guideVEl); }
-  guideVEl.style.left = xmm + 'mm';
-  guideVEl.style.height = state.page.height + 'mm';
-  guideVEl.style.display = 'block';
+  if(!konvaGuideLayer) return;
+  konvaGuideLayer.find('.snap-guide-v').forEach(line => line.destroy());
+  guideVEl = new Konva.Line({ points:[mmToPx(xmm),0,mmToPx(xmm),mmToPx(state.page.height)], stroke:'#A8341F', strokeWidth:1, dash:[4,6], name:'snap-guide-v', listening:false });
+  konvaGuideLayer.add(guideVEl);
+  konvaGuideLayer.batchDraw();
 }
-function hideGuideV(){ if(guideVEl) guideVEl.style.display = 'none'; }
+function hideGuideV(){ if(guideVEl){ guideVEl.destroy(); guideVEl = null; if(konvaGuideLayer) konvaGuideLayer.batchDraw(); } }
 function showGuideH(ymm){
-  if(!guideHEl){ guideHEl = document.createElement('div'); guideHEl.className = 'snap-guide snap-guide-h no-print'; document.getElementById('page').appendChild(guideHEl); }
-  guideHEl.style.top = ymm + 'mm';
-  guideHEl.style.width = state.page.width + 'mm';
-  guideHEl.style.display = 'block';
+  if(!konvaGuideLayer) return;
+  konvaGuideLayer.find('.snap-guide-h').forEach(line => line.destroy());
+  guideHEl = new Konva.Line({ points:[0,mmToPx(ymm),mmToPx(state.page.width),mmToPx(ymm)], stroke:'#A8341F', strokeWidth:1, dash:[4,6], name:'snap-guide-h', listening:false });
+  konvaGuideLayer.add(guideHEl);
+  konvaGuideLayer.batchDraw();
 }
-function hideGuideH(){ if(guideHEl) guideHEl.style.display = 'none'; }
+function hideGuideH(){ if(guideHEl){ guideHEl.destroy(); guideHEl = null; if(konvaGuideLayer) konvaGuideLayer.batchDraw(); } }
 
 // ---------- drag / resize / marquee ----------
 function onPageMouseDown(e){
+  if(e.target.closest('.konva-editor-layer')) return;
   const handle = e.target.closest('.resize-handle');
   if(handle){
     const el = getEl(handle.dataset.id);
@@ -926,9 +1103,9 @@ document.addEventListener('mousemove', e => {
       const nx = clamp(start.x + dxRaw + snapDX, 0, state.page.width - el.width);
       const ny = clamp(start.y + dyRaw + snapDY, 0, state.page.height - heightOf(el));
       el.x = round1(nx); el.y = round1(ny);
-      applyElementStyle(id);
+      updateKonvaNodePosition(id);
+      updateSelectionOverlayPosition(id);
     });
-    updateSchemaView();
     if(snap.guideX != null) showGuideV(snap.guideX); else hideGuideV();
     if(snap.guideY != null) showGuideH(snap.guideY); else hideGuideH();
 
@@ -940,7 +1117,6 @@ document.addEventListener('mousemove', e => {
     el.width = round1(clamp(interaction.startW + dx, 5, state.page.width - el.x));
     if(el.type !== 'line') el.height = round1(clamp(interaction.startH + dy, 5, state.page.height - el.y));
     applyElementStyle(el.id);
-    updateSchemaView();
   }
 });
 
@@ -969,6 +1145,16 @@ document.addEventListener('mouseup', () => {
   }
   interaction = null;
 });
+
+document.addEventListener('pointercancel', cancelInteraction);
+document.addEventListener('contextmenu', event => {
+  if(event.target.closest('#page')){
+    event.preventDefault();
+    cancelInteraction();
+    render();
+  }
+});
+window.addEventListener('blur', cancelInteraction);
 
 document.getElementById('page').addEventListener('mousedown', onPageMouseDown);
 
@@ -1020,7 +1206,11 @@ document.addEventListener('keydown', e => {
   if(mod && !typing && (e.key === 'y' || e.key === 'Y')){ e.preventDefault(); redo(); return; }
   if(mod && !typing && (e.key === 'd' || e.key === 'D')){ e.preventDefault(); duplicateSelection(); return; }
   if(mod && !typing && (e.key === 'a' || e.key === 'A')){ e.preventDefault(); selectAll(); return; }
-  if(e.key === 'Escape' && !typing){ clearSelection(); return; }
+  if(e.key === 'Escape' && !typing){
+    if(interaction || konvaDragState || konvaMarqueeState){ cancelInteraction(); render(); }
+    else clearSelection();
+    return;
+  }
   if((e.key === 'Delete' || e.key === 'Backspace') && state.selectedIds.size && !typing){
     e.preventDefault(); deleteSelection(); return;
   }
@@ -1090,11 +1280,12 @@ async function uploadBrandImage(name, file){
   renderInspector();
   if(db){
     try{
-      const hostedUrl = await uploadCoverImage(file, 'logos');
-      const { data, error } = await db.from('brand_images').insert({ name, image_url: hostedUrl }).select().single();
+      const storagePath = await uploadCoverImage(file, 'logos');
+      const { data, error } = await db.from('brand_images').insert({ name, image_url: storagePath, owner_id: currentUserId() }).select().single();
       if(error) throw error;
       img.dbId = data.id;
-      img.dataUrl = hostedUrl;
+      img.storagePath = storagePath;
+      img.dataUrl = await signedCoverImageUrl(storagePath);
       renderBrandList();
       renderPage();
     }catch(err){
@@ -1114,7 +1305,7 @@ async function deleteBrandImage(id){
   if(db && img && img.dbId){
     const { error } = await db.from('brand_images').delete().eq('id', img.dbId);
     if(error) console.warn('Could not delete brand image from the database', error);
-    await deleteCoverImage(img.dataUrl);
+    await deleteCoverImage(img.storagePath);
   }
 }
 function renderBrandList(){
@@ -1122,7 +1313,7 @@ function renderBrandList(){
   if(!box) return;
   box.innerHTML = brandImages.map(b => `
     <div class="brand-row">
-      <img class="brand-thumb" src="${b.dataUrl}">
+      ${sanitizeImageSrc(b.dataUrl) ? `<img class="brand-thumb" src="${escapeHtml(sanitizeImageSrc(b.dataUrl))}">` : ''}
       <span class="brand-name">${escapeHtml(b.name)}</span>
       <button class="btn tiny danger" onclick="deleteBrandImage('${b.id}')">Remove</button>
     </div>`).join('');
@@ -1157,12 +1348,36 @@ function importTemplateFile(file){
         syncPageSizeSelect();
         buildRulerLabels();
       }
-      if(Array.isArray(obj.elements)) state.elements = obj.elements;
+      if(Array.isArray(obj.elements)) state.elements = obj.elements.map(normalizeImportedElement).filter(Boolean);
       state.selectedIds = new Set();
       render();
     }catch(err){ alert('Could not read that template file: ' + err.message); }
   };
   reader.readAsText(file);
+}
+
+function normalizeImportedPage(page){
+  const size = page.size === 'A3' ? 'A3' : 'A4';
+  const orientation = page.orientation === 'landscape' ? 'landscape' : 'portrait';
+  const base = PAGE_SIZES[size];
+  return { size, orientation, width:orientation === 'landscape' ? base.h : base.w, height:orientation === 'landscape' ? base.w : base.h };
+}
+function normalizeImportedElement(raw){
+  if(!raw || !['text','image','line','rect'].includes(raw.type)) return null;
+  const element = { ...raw, id:newId('el'), type:raw.type };
+  element.x = clamp(Number(raw.x) || 0, 0, state.page.width);
+  element.y = clamp(Number(raw.y) || 0, 0, state.page.height);
+  element.width = clamp(Number(raw.width) || 5, 5, state.page.width - element.x);
+  element.height = raw.type === 'line' ? 0 : clamp(Number(raw.height) || 5, 5, state.page.height - element.y);
+  if(raw.type === 'text'){
+    element.content = String(raw.content || '').slice(0, 2000);
+    element.prefix = String(raw.prefix || '').slice(0, 200);
+    element.fontSize = clamp(Number(raw.fontSize) || 12, 1, 200);
+    element.weight = [400,500,600].includes(Number(raw.weight)) ? Number(raw.weight) : 400;
+    element.align = ['left','center','right'].includes(raw.align) ? raw.align : 'left';
+  }
+  if(raw.type === 'image') element.src = sanitizeImageSrc(raw.src);
+  return element;
 }
 
 // ---------- preset library (persisted) ----------
@@ -1244,8 +1459,9 @@ function onCreatePhotoSelected(file){
 function updateDropzonePreview(){
   const zone = document.getElementById('cpDropzone');
   if(!zone) return;
-  zone.innerHTML = createData.projectImage
-    ? `<img src="${createData.projectImage}"><div class="replace-hint">Click to replace</div>`
+  const src = sanitizeImageSrc(createData.projectImage);
+  zone.innerHTML = src
+    ? `<img src="${escapeHtml(src)}"><div class="replace-hint">Click to replace</div>`
     : `<span>Drag a photo here, or click to browse</span>`;
 }
 function onCreatePresetChange(){
@@ -1303,12 +1519,13 @@ async function recordProject(preset){
         preset_id: preset.id,
         preset_name: project.presetName,
         preset_snapshot: project.presetSnapshot,
-        project_image_url: hostedUrl
+        project_image_url: hostedUrl,
+        owner_id: currentUserId()
       };
       const { data, error } = await db.from('projects').insert(row).select().single();
       if(error) throw error;
       project.dbId = data.id;
-      if(hostedUrl) project.projectImage = hostedUrl;
+      if(hostedUrl){ project.projectImagePath = hostedUrl; project.projectImage = await signedCoverImageUrl(hostedUrl); }
       saveToStorage(LS_KEYS.projects, projects);
     }catch(err){
       console.warn('Could not save this project to the database; it will only exist on this device.', err);
@@ -1355,7 +1572,7 @@ async function deleteProject(id){
       const { error } = await db.from('projects').delete().eq('id', project.dbId);
       if(error) console.warn('Could not delete project from the database', error);
     }
-    await deleteCoverImage(project.projectImage);
+    await deleteCoverImage(project.projectImagePath);
   }
 }
 function generateCover(){
@@ -1434,7 +1651,8 @@ refreshUndoRedoButtons();
 render();
 syncZoomLayout();
 
-async function initFromDatabase(){
+async function initFromDatabase(runId){
+  if(db && (!currentSession || (runId && runId !== databaseInitRun))) return;
   if(!db){
     console.warn('Supabase is not configured (check supabase-config.js); staying on local-only storage.');
     if(!presets.length) seedDefaultPreset();
@@ -1447,13 +1665,22 @@ async function initFromDatabase(){
       db.from('brand_images').select('*').order('created_at', { ascending:false }),
       db.from('projects').select('*').order('created_at', { ascending:false })
     ]);
+    if(runId && runId !== databaseInitRun) return;
     if(presetRes.error) throw presetRes.error;
     if(brandRes.error) throw brandRes.error;
     if(projectRes.error) throw projectRes.error;
 
     presets = presetRes.data.map(presetFromRow);
-    brandImages = brandRes.data.map(brandImageFromRow);
-    projects = projectRes.data.map(projectFromRow);
+    brandImages = await Promise.all(brandRes.data.map(async row => {
+      const image = brandImageFromRow(row);
+      image.dataUrl = await signedCoverImageUrl(image.storagePath);
+      return image;
+    }));
+    projects = await Promise.all(projectRes.data.map(async row => {
+      const project = projectFromRow(row);
+      project.projectImage = await signedCoverImageUrl(project.projectImagePath);
+      return project;
+    }));
 
     if(!presets.length){
       seedDefaultPreset();
@@ -1478,4 +1705,48 @@ function finishDataInit(){
   renderCreatePreview();
   render();
 }
-initFromDatabase();
+
+function showAuthGate(){
+  document.getElementById('authGate').style.display = 'flex';
+  document.getElementById('appShell').style.display = 'none';
+}
+function showAppShell(session){
+  document.getElementById('authGate').style.display = 'none';
+  document.getElementById('appShell').style.display = '';
+  const emailLabel = document.getElementById('authUserEmail');
+  if(emailLabel) emailLabel.textContent = session && session.user && session.user.email || '';
+}
+async function handleSignIn(){
+  const errorEl = document.getElementById('authError');
+  const button = document.getElementById('authSubmitBtn');
+  errorEl.textContent = '';
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  if(!email || !password){ errorEl.textContent = 'Enter your email and password.'; return; }
+  button.disabled = true;
+  button.textContent = 'Signing in...';
+  const { error } = await db.auth.signInWithPassword({ email, password });
+  button.disabled = false;
+  button.textContent = 'Sign in';
+  if(error) errorEl.textContent = error.message;
+}
+async function handleSignOut(){
+  if(db) await db.auth.signOut();
+}
+
+if(db){
+  showAuthGate();
+  db.auth.onAuthStateChange((event, session) => {
+    currentSession = session;
+    databaseInitRun++;
+    if(session){
+      showAppShell(session);
+      if(event === 'INITIAL_SESSION' || event === 'SIGNED_IN') initFromDatabase(databaseInitRun);
+    } else {
+      showAuthGate();
+    }
+  });
+} else {
+  showAppShell(null);
+  initFromDatabase();
+}

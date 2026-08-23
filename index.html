@@ -3,12 +3,33 @@
 <head>
 <meta charset="UTF-8">
 <title>Cover generator</title>
+<!-- Strict script CSP is deferred until inline event attributes are migrated. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob: https:; connect-src 'self' https://ipfgnmmihumhdvbkgnev.supabase.co; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self';">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+
+  <div class="auth-gate" id="authGate">
+    <form class="auth-panel" onsubmit="event.preventDefault(); handleSignIn();">
+      <p class="auth-kicker">Cover generator</p>
+      <h1>Sign in to continue</h1>
+      <div class="field">
+        <label for="authEmail">Email</label>
+        <input id="authEmail" type="email" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label for="authPassword">Password</label>
+        <input id="authPassword" type="password" autocomplete="current-password" required>
+      </div>
+      <p class="auth-error" id="authError" role="alert"></p>
+      <button class="btn primary full" id="authSubmitBtn" type="submit">Sign in</button>
+    </form>
+  </div>
+
+  <div id="appShell" style="display:none">
 
   <div class="topbar no-print">
     <div class="topbar-left">
@@ -20,6 +41,8 @@
       <button class="tab-btn" id="tabBtnCreate" onclick="switchTab('create')">Create project</button>
     </div>
     <div class="topbar-right" id="editorTopbarActions">
+      <span class="auth-user">Signed in as <strong id="authUserEmail"></strong></span>
+      <button class="btn small" onclick="handleSignOut()">Sign out</button>
       <button class="btn small" id="btnUndo" onclick="undo()" disabled>Undo</button>
       <button class="btn small" id="btnRedo" onclick="redo()" disabled>Redo</button>
       <button class="btn small zoom-control" onclick="changeZoom(-0.1)" aria-label="Zoom out">-</button>
@@ -179,8 +202,10 @@
 
   </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/konva@10.3.1/konva.min.js"></script>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js" integrity="sha384-AkNSQdptcXlJ0/NBZc4qGk86cDVXcCevwoWgEKIpHOEfbvlXGLlIkimQtONt8KNf" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/konva@10.3.1/konva.min.js" integrity="sha384-g/foDOBPfwt/+q5fRDcoeqhRPj+bHyK1A7GxMZ6pIKFFhxEoRuVHjGr4o8SlSp02" crossorigin="anonymous"></script>
 <script src="supabase-config.js"></script>
 <script src="app.js"></script>
 </body>
