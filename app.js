@@ -445,9 +445,9 @@ function makeKonvaNode(el){
   if(el.type === 'text'){
     node = new Konva.Text({ text:konvaTextValue(el), x:x + width / 2, y:y + visualHeight / 2, offsetX:width / 2, offsetY:visualHeight / 2, width, height, fontSize:el.fontSize, fontFamily:el.variant === 'display' ? 'Fraunces' : 'Inter', fontStyle:el.weight >= 600 ? 'bold' : 'normal', fill:'#171614', align:el.align, listening:true });
   } else if(el.type === 'line'){
-    node = new Konva.Group({ x:x + width / 2, y:y + visualHeight / 2, offsetX:width / 2, offsetY:visualHeight / 2, width, height:visualHeight, listening:true });
-    node.add(new Konva.Rect({ x:0, y:-6, width, height:12, fill:'#000000', opacity:0.01, listening:true }));
-    node.add(new Konva.Line({ points:[0, 0, width, 0], stroke:lineStroke(el), strokeWidth:lineWidth(el), lineJoin:el.lineJoin || 'miter', listening:false }));
+    // Position a real line at its centre. hitStrokeWidth makes the full line
+    // easy to pick up after rotation without a separate, transformed hit box.
+    node = new Konva.Line({ points:[-width / 2, 0, width / 2, 0], x:x + width / 2, y, stroke:lineStroke(el), strokeWidth:lineWidth(el), hitStrokeWidth:16, lineCap:'round', lineJoin:el.lineJoin || 'miter', listening:true });
   } else if(el.type === 'rect'){
     node = new Konva.Rect({ x:x + width / 2, y:y + visualHeight / 2, offsetX:width / 2, offsetY:visualHeight / 2, width, height, fill:rectFill(el), stroke:rectStroke(el), strokeWidth:Number(el.strokeWidth) || 1, lineJoin:el.lineJoin || 'miter', listening:true });
   } else {
@@ -472,19 +472,10 @@ function makeKonvaNode(el){
     node.shadowOffset({ x:Number(el.shadowOffsetX) || 0, y:Number(el.shadowOffsetY) || 0 });
     node.shadowOpacity(Number.isFinite(el.shadowOpacity) ? el.shadowOpacity : 0);
   }
-  node.draggable(el.type === 'line');
-  if(el.type === 'line'){
-    node.on('dragmove', event => {
-      const position = event.target.position();
-      el.x = round1(position.x / getPxPerMm() - el.width / 2);
-      el.y = round1(position.y / getPxPerMm() - heightOf(el) / 2);
-      clampElementPosition(el);
-      event.target.position({ x:mmToPx(el.x + el.width / 2), y:mmToPx(el.y + heightOf(el) / 2) });
-      updateSchemaView();
-    });
-    node.on('dragend', () => render());
-  }
-  const dragStartNode = el.type === 'line' ? node.children[0] : node;
+  // All element types, including lines, use the same stage-level drag logic.
+  // Native Group dragging made a line's hit area and endpoints move out of sync.
+  node.draggable(false);
+  const dragStartNode = node;
   dragStartNode.on('mousedown', event => {
     const native = event.evt;
     native.stopPropagation();
@@ -495,8 +486,6 @@ function makeKonvaNode(el){
       if(next.has(el.id)) next.delete(el.id); else next.add(el.id);
       state.selectedIds = next;
     } else if(!state.selectedIds.has(el.id)) state.selectedIds = new Set([el.id]);
-    if(el.type === 'line') return;
-    render();
     if(!state.selectedIds.has(el.id)) return;
     konvaDragState = { id:el.id, startX:pointer.x, startY:pointer.y, positions:Object.fromEntries([...state.selectedIds].map(id => { const selected = getEl(id); return [id, { x:selected.x, y:selected.y }]; })) };
     pushUndo();
@@ -518,6 +507,28 @@ function renderKonva(){
     konvaStage.add(konvaGuideLayer);
     konvaStage.on('mousedown', event => {
       if(event.target !== konvaStage){
+        let ancestor = event.target;
+        let isTransformerTarget = false;
+        while(ancestor && ancestor !== konvaStage){
+          if(ancestor === konvaTransformer){ isTransformerTarget = true; break; }
+          ancestor = ancestor.getParent();
+        }
+        if(isTransformerTarget){
+          const targetName = typeof event.target.name === 'function' ? event.target.name() : '';
+          // Preserve the transformer's resize and rotation handles. Its border
+          // may overlap a narrow, vertical line, so treat the remaining area
+          // as a normal drag surface for the selected element.
+          if(String(targetName).includes('anchor')) return;
+          const id = [...state.selectedIds][0];
+          const selected = id && getEl(id);
+          const pointer = getStagePointer(event.evt);
+          if(!selected || !pointer) return;
+          event.evt.stopPropagation();
+          event.cancelBubble = true;
+          konvaDragState = { id, startX:pointer.x, startY:pointer.y, positions:{ [id]:{ x:selected.x, y:selected.y } } };
+          pushUndo();
+          return;
+        }
         let target = event.target;
         while(target && target !== konvaStage && !target.id()) target = target.getParent();
         const id = target && target !== konvaStage ? target.id() : null;
@@ -531,7 +542,6 @@ function renderKonva(){
           if(next.has(id)) next.delete(id); else next.add(id);
           state.selectedIds = next;
         } else if(!state.selectedIds.has(id)) state.selectedIds = new Set([id]);
-        render();
         if(!state.selectedIds.has(id)) return;
         konvaDragState = { id, startX:pointer.x, startY:pointer.y, positions:Object.fromEntries([...state.selectedIds].map(selectedId => { const selected = getEl(selectedId); return [selectedId, { x:selected.x, y:selected.y }]; })) };
         pushUndo();
@@ -567,15 +577,26 @@ function renderKonva(){
       if(!pointer) return;
       const dx = (pointer.x - konvaDragState.startX) / getPxPerMm();
       const dy = (pointer.y - konvaDragState.startY) / getPxPerMm();
+      const primary = getEl(konvaDragState.id);
+      const primaryStart = konvaDragState.positions[konvaDragState.id];
+      const proposedX = primaryStart ? primaryStart.x + dx : 0;
+      const proposedY = primaryStart ? primaryStart.y + dy : 0;
+      const snap = primary && primaryStart
+        ? computeSnap(primary, proposedX, proposedY, Object.keys(konvaDragState.positions))
+        : { x:null, y:null, guideX:null, guideY:null };
+      const snapDX = snap.x != null ? snap.x - proposedX : 0;
+      const snapDY = snap.y != null ? snap.y - proposedY : 0;
       Object.entries(konvaDragState.positions).forEach(([id, start]) => {
         const el = getEl(id);
         if(!el) return;
-        el.x = round1(start.x + dx);
-        el.y = round1(start.y + dy);
+        el.x = round1(start.x + dx + snapDX);
+        el.y = round1(start.y + dy + snapDY);
         clampElementPosition(el);
         const node = konvaLayer.findOne('#' + id);
         if(node){ node.x(mmToPx(el.x + el.width / 2)); node.y(mmToPx(el.y + heightOf(el) / 2)); }
       });
+      if(snap.guideX != null) showGuideV(snap.guideX); else hideGuideV();
+      if(snap.guideY != null) showGuideH(snap.guideY); else hideGuideH();
       konvaLayer.batchDraw();
       updateSchemaView();
     });
@@ -598,7 +619,11 @@ function renderKonva(){
         konvaMarqueeState.box.remove();
         konvaMarqueeState = null;
         render();
-      } else if(konvaDragState){ konvaDragState = null; render(); }
+      } else if(konvaDragState){
+        konvaDragState = null;
+        hideGuideV(); hideGuideH();
+        render();
+      }
     });
   }
   konvaStage.size({ width:page.clientWidth, height:page.clientHeight });
@@ -628,9 +653,15 @@ function renderKonva(){
       const absScaleX = Math.abs(scaleX), absScaleY = Math.abs(scaleY);
       el.width = round1(clamp(el.width * absScaleX, 5, state.page.width));
       if(el.type !== 'line') el.height = round1(clamp(el.height * absScaleY, 5, state.page.height));
-      el.x = round1(clamp(node.x() / getPxPerMm() - el.width / 2, 0, state.page.width - el.width));
-      el.y = round1(clamp(node.y() / getPxPerMm() - heightOf(el) / 2, 0, state.page.height - heightOf(el)));
       el.rotation = round1(node.rotation());
+      if(el.type === 'line'){
+        el.x = round1(node.x() / getPxPerMm() - el.width / 2);
+        el.y = round1(node.y() / getPxPerMm());
+        clampElementPosition(el);
+      } else {
+        el.x = round1(clamp(node.x() / getPxPerMm() - el.width / 2, 0, state.page.width - el.width));
+        el.y = round1(clamp(node.y() / getPxPerMm() - heightOf(el) / 2, 0, state.page.height - heightOf(el)));
+      }
       el.flipX = scaleX < 0;
       el.flipY = scaleY < 0;
       node.scale({ x:1, y:1 });
@@ -657,6 +688,24 @@ function renderInspector(){
       <div class="row-btns" style="margin-bottom:16px">
         <button class="btn small" onclick="centerSelectionH()">Center H</button>
         <button class="btn small" onclick="centerSelectionV()">Center V</button>
+      </div>
+      <div class="field"><label>Position on canvas</label>
+        <div class="position-edges">
+          <button class="btn tiny" onclick="positionSelection('top')">Top</button>
+          <button class="btn tiny" onclick="positionSelection('middle')">Middle</button>
+          <button class="btn tiny" onclick="positionSelection('bottom')">Bottom</button>
+        </div>
+        <div class="position-grid" style="margin-top:6px">
+          <button class="btn tiny" onclick="positionSelection('top-left')">Top left</button>
+          <button class="btn tiny" onclick="positionSelection('top-center')">Top center</button>
+          <button class="btn tiny" onclick="positionSelection('top-right')">Top right</button>
+          <button class="btn tiny" onclick="positionSelection('middle-left')">Middle left</button>
+          <button class="btn tiny" onclick="positionSelection('center')">Center</button>
+          <button class="btn tiny" onclick="positionSelection('middle-right')">Middle right</button>
+          <button class="btn tiny" onclick="positionSelection('bottom-left')">Bottom left</button>
+          <button class="btn tiny" onclick="positionSelection('bottom-center')">Bottom center</button>
+          <button class="btn tiny" onclick="positionSelection('bottom-right')">Bottom right</button>
+        </div>
       </div>
       <div class="insp-row"><label>X</label><input type="number" id="insp-x" value="${el.x}" step="1" oninput="updateNum('${el.id}','x',this.value)"></div>
       <div class="insp-row"><label>Y</label><input type="number" id="insp-y" value="${el.y}" step="1" oninput="updateNum('${el.id}','y',this.value)"></div>
@@ -689,8 +738,24 @@ function renderInspector(){
       }
     }
     if(el.type === 'image'){
+      const imageRatio = el.width / Math.max(el.height, 0.1);
       html += `<div class="field"><label>Aspect ratio</label>
         <label class="check-row"><input type="checkbox" ${el.keepRatio !== false ? 'checked' : ''} onchange="updateProp('${el.id}','keepRatio',this.checked)"> Lock image ratio</label>
+        <select style="margin-top:8px" onchange="setImageRatioPreset('${el.id}',this.value)">
+          <option value="">Choose container ratio</option>
+          <option value="1:1">Square (1:1)</option>
+          <option value="4:3">Standard (4:3)</option>
+          <option value="3:2">Photo (3:2)</option>
+          <option value="16:9">Widescreen (16:9)</option>
+          <option value="9:16">Portrait (9:16)</option>
+        </select>
+        <div class="image-ratio-inputs" style="margin-top:8px">
+          <input type="number" id="image-ratio-w" min="0.1" step="0.1" value="${round1(imageRatio)}" aria-label="Custom ratio width">
+          <span>:</span>
+          <input type="number" id="image-ratio-h" min="0.1" step="0.1" value="1" aria-label="Custom ratio height">
+          <button class="btn tiny" type="button" onclick="applyCustomImageRatio('${el.id}')">Apply</button>
+        </div>
+        <p class="hint" style="margin:8px 0 0">Container size is in mm above. A ratio preserves the current width and adjusts its height.</p>
       </div>`;
       if(el.role === 'logo'){
         html += `<div class="field"><label>Logo</label>
@@ -889,6 +954,34 @@ function updateNum(id, prop, value){
   updateSchemaView();
   renderPresetSaveState();
 }
+function applyImageAspectRatio(id, ratioWidth, ratioHeight){
+  const el = getEl(id);
+  const ratio = Number(ratioWidth) / Number(ratioHeight);
+  if(!el || el.type !== 'image' || !Number.isFinite(ratio) || ratio <= 0) return;
+  pushUndo();
+  const availableWidth = Math.max(5, state.page.width - el.x);
+  const availableHeight = Math.max(5, state.page.height - el.y);
+  let width = clamp(el.width, 5, availableWidth);
+  let height = width / ratio;
+  if(height > availableHeight){
+    height = availableHeight;
+    width = height * ratio;
+  }
+  el.width = round1(width);
+  el.height = round1(height);
+  el.keepRatio = true;
+  render();
+}
+function setImageRatioPreset(id, value){
+  if(!value) return;
+  const [width, height] = value.split(':').map(Number);
+  applyImageAspectRatio(id, width, height);
+}
+function applyCustomImageRatio(id){
+  const width = parseFloat(document.getElementById('image-ratio-w')?.value);
+  const height = parseFloat(document.getElementById('image-ratio-h')?.value);
+  applyImageAspectRatio(id, width, height);
+}
 function updateProp(id, prop, value){
   const el = getEl(id);
   if(!el) return;
@@ -898,6 +991,24 @@ function updateProp(id, prop, value){
   else applyElementStyle(id);
   updateSchemaView();
   renderPresetSaveState();
+}
+function positionSelection(position){
+  const ids = [...state.selectedIds].filter(id => getEl(id));
+  if(ids.length !== 1) return;
+  const el = getEl(ids[0]);
+  const positions = {
+    top:{ y:0 }, middle:{ y:(state.page.height - heightOf(el)) / 2 }, bottom:{ y:state.page.height - heightOf(el) },
+    'top-left':{ x:0, y:0 }, 'top-center':{ x:(state.page.width - el.width) / 2, y:0 }, 'top-right':{ x:state.page.width - el.width, y:0 },
+    'middle-left':{ x:0, y:(state.page.height - heightOf(el)) / 2 }, center:{ x:(state.page.width - el.width) / 2, y:(state.page.height - heightOf(el)) / 2 }, 'middle-right':{ x:state.page.width - el.width, y:(state.page.height - heightOf(el)) / 2 },
+    'bottom-left':{ x:0, y:state.page.height - heightOf(el) }, 'bottom-center':{ x:(state.page.width - el.width) / 2, y:state.page.height - heightOf(el) }, 'bottom-right':{ x:state.page.width - el.width, y:state.page.height - heightOf(el) }
+  };
+  const target = positions[position];
+  if(!target) return;
+  pushUndo();
+  if(target.x != null) el.x = round1(target.x);
+  if(target.y != null) el.y = round1(target.y);
+  clampElementPosition(el);
+  render();
 }
 
 function flipSelection(axis){

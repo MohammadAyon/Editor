@@ -80,6 +80,13 @@
   .bound-note{font-size:11px;color:var(--gray-500);line-height:1.6;border:1px solid var(--border);border-radius:var(--radius);padding:10px;}
   .bound-note strong{color:var(--ink);font-weight:600;}
   .row-btns{display:flex;gap:8px;flex-wrap:wrap;}
+  .image-ratio-inputs{display:flex;align-items:center;gap:5px;}
+  .image-ratio-inputs input{width:52px;min-width:0;background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--ink);padding:5px 1px;font:12px var(--font-mono);}
+  .image-ratio-inputs input:focus{outline:none;border-bottom-color:var(--ink);}
+  .image-ratio-inputs span{color:var(--gray-500);}
+  .position-edges{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;}
+  .position-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;}
+  .position-grid .btn{padding-left:3px;padding-right:3px;white-space:normal;line-height:1.25;}
   .check-row{display:flex!important;align-items:center;gap:8px;text-transform:none!important;letter-spacing:0!important;color:var(--ink)!important;cursor:pointer;}
   .check-row input{accent-color:var(--ink);}
   .multi-count{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--gray-500);margin-bottom:16px;}
@@ -132,7 +139,9 @@
   .el-image[data-role="photo"] img{object-fit:cover;}
   .el-image-empty span{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--gray-500);font-family:var(--font-sans);text-align:center;padding:6px;}
   .el-line{border-top:1px solid var(--ink);height:0;}
-  #page.konva-editor-active>.el-line{visibility:visible;opacity:0!important;z-index:6;height:12px;margin-top:-6px;border-top:0;}
+  /* Lines are picked and dragged by their Konva hit area. Keeping this legacy
+     DOM hitbox interactive would place it above the canvas after rotation. */
+  #page.konva-editor-active>.el-line{visibility:visible;opacity:0!important;z-index:6;height:12px;margin-top:-6px;border-top:0;pointer-events:none;}
   .el-rect{overflow:visible;}
   .el-rect>svg{display:block;width:100%;height:100%;overflow:visible;}
 
