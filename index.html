@@ -113,8 +113,9 @@
         <h2>Preset file</h2>
         <div class="row-btns">
           <button class="btn small" onclick="saveCurrentAsPreset()">Save as preset</button>
-          <button class="btn small" onclick="updateLoadedPreset()">Update loaded preset</button>
+          <button class="btn small" id="savePresetChangesBtn" onclick="updateLoadedPreset()" disabled>Save preset changes</button>
         </div>
+        <p class="hint" id="presetEditStatus" style="margin-top:8px">Load a saved preset to edit and save it.</p>
         <div class="row-btns" style="margin-top:8px">
           <button class="btn small" onclick="exportTemplate()">Export .json</button>
           <button class="btn small" onclick="document.getElementById('importInput').click()">Import .json</button>
@@ -138,6 +139,17 @@
       <div class="section">
         <h2>Selection</h2>
         <div id="inspector"></div>
+      </div>
+      <div class="section">
+        <h2>Layers</h2>
+        <p class="hint layer-hint">Topmost objects appear first. Select one or more objects, then change their stack order.</p>
+        <div class="row-btns layer-actions">
+          <button class="btn small" onclick="bringSelectionToFront()">To front</button>
+          <button class="btn small" onclick="bringSelectionForward()">Up one</button>
+          <button class="btn small" onclick="sendSelectionBackward()">Down one</button>
+          <button class="btn small" onclick="sendSelectionToBack()">To back</button>
+        </div>
+        <div id="layersList"></div>
       </div>
       <div class="section">
         <h2>Template schema (JSON)</h2>

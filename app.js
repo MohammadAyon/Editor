@@ -49,9 +49,15 @@ async function uploadCoverImage(file, folder){
 }
 async function signedCoverImageUrl(path, expiresInSeconds){
   if(!path || !db) return null;
-  const { data, error } = await db.storage.from(COVER_BUCKET).createSignedUrl(path, expiresInSeconds || 60 * 60 * 24);
+  const { data, error } = await db.storage.from(COVER_BUCKET).createSignedUrl(path, expiresInSeconds || 60 * 60);
   if(error){ console.warn('Could not sign image URL', error); return null; }
   return data.signedUrl;
+}
+async function refreshSignedCoverImageUrls(){
+  if(!db || !currentSession) return;
+  await Promise.all(brandImages.map(async image => { if(image.storagePath) image.dataUrl = await signedCoverImageUrl(image.storagePath); }));
+  await Promise.all(projects.map(async project => { if(project.projectImagePath) project.projectImage = await signedCoverImageUrl(project.projectImagePath); }));
+  renderBrandList(); renderProjectsList(); renderPage(); renderCreatePreview();
 }
 async function deleteCoverImage(path){
   if(!path) return;
@@ -251,6 +257,16 @@ function syncPageSizeSelect(){
 function getEl(id){ return state.elements.find(e => e.id === id); }
 function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
 function round1(v){ return Math.round(v*10)/10; }
+function clampElementPosition(el){
+  el.x = round1(clamp(el.x, 0, Math.max(0, state.page.width - el.width)));
+  el.y = round1(clamp(el.y, 0, Math.max(0, state.page.height - heightOf(el))));
+}
+function advanceIdCounter(elements){
+  (elements || []).forEach(el => {
+    const match = String(el.id || '').match(/_(\d+)$/);
+    if(match) idCounter = Math.max(idCounter, Number(match[1]) + 1);
+  });
+}
 function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function sanitizeImageSrc(src){
   if(typeof src !== 'string' || !src) return null;
@@ -317,7 +333,7 @@ function onCanvasWheel(event){
 
 // ---------- undo / redo ----------
 function pushUndo(){
-  undoStack.push(JSON.stringify(state.elements));
+  undoStack.push(JSON.stringify({ page:state.page, elements:state.elements }));
   if(undoStack.length > 60) undoStack.shift();
   redoStack.length = 0;
   refreshUndoRedoButtons();
@@ -328,21 +344,28 @@ function pushUndoDebounced(key){
   pushUndo();
   lastEditKey = key; lastEditTime = now;
 }
+function restoreEditorSnapshot(snapshot){
+  const parsed = JSON.parse(snapshot);
+  // Accept legacy element-only snapshots from sessions opened before this fix.
+  state.elements = Array.isArray(parsed) ? parsed : parsed.elements;
+  if(!Array.isArray(parsed) && parsed.page) state.page = parsed.page;
+  advanceIdCounter(state.elements);
+  state.selectedIds = new Set([...state.selectedIds].filter(id => getEl(id)));
+  applyPageCSSVars(); updatePrintStyle(); updatePageSub(); syncPageSizeSelect(); buildRulerLabels();
+}
 function undo(){
   if(!undoStack.length) return;
   const snap = undoStack.pop();
-  redoStack.push(JSON.stringify(state.elements));
-  state.elements = JSON.parse(snap);
-  state.selectedIds = new Set([...state.selectedIds].filter(id => getEl(id)));
+  redoStack.push(JSON.stringify({ page:state.page, elements:state.elements }));
+  restoreEditorSnapshot(snap);
   refreshUndoRedoButtons();
   render();
 }
 function redo(){
   if(!redoStack.length) return;
   const snap = redoStack.pop();
-  undoStack.push(JSON.stringify(state.elements));
-  state.elements = JSON.parse(snap);
-  state.selectedIds = new Set([...state.selectedIds].filter(id => getEl(id)));
+  undoStack.push(JSON.stringify({ page:state.page, elements:state.elements }));
+  restoreEditorSnapshot(snap);
   refreshUndoRedoButtons();
   render();
 }
@@ -454,6 +477,8 @@ function makeKonvaNode(el){
       const position = event.target.position();
       el.x = round1(position.x / getPxPerMm() - el.width / 2);
       el.y = round1(position.y / getPxPerMm() - heightOf(el) / 2);
+      clampElementPosition(el);
+      event.target.position({ x:mmToPx(el.x + el.width / 2), y:mmToPx(el.y + heightOf(el) / 2) });
       updateSchemaView();
     });
     node.on('dragend', () => render());
@@ -546,6 +571,7 @@ function renderKonva(){
         if(!el) return;
         el.x = round1(start.x + dx);
         el.y = round1(start.y + dy);
+        clampElementPosition(el);
         const node = konvaLayer.findOne('#' + id);
         if(node){ node.x(mmToPx(el.x + el.width / 2)); node.y(mmToPx(el.y + heightOf(el) / 2)); }
       });
@@ -740,10 +766,34 @@ function renderInspector(){
 function updateSchemaView(){
   document.getElementById('schemaOutput').textContent = JSON.stringify({ page: state.page, elements: state.elements }, null, 2);
 }
+function layerLabel(el){
+  if(el.type === 'text') return el.field ? `Text: ${el.field}` : `Text: ${el.content || 'Untitled'}`;
+  if(el.type === 'image') return el.role === 'logo' ? 'Image: logo' : 'Image: photo';
+  return el.type === 'line' ? 'Line' : 'Rectangle';
+}
+function selectLayer(id, additive){
+  const selected = additive ? new Set(state.selectedIds) : new Set();
+  if(additive && selected.has(id)) selected.delete(id); else selected.add(id);
+  state.selectedIds = selected;
+  render();
+}
+function renderLayers(){
+  const box = document.getElementById('layersList');
+  if(!box) return;
+  box.className = 'layers-list';
+  box.innerHTML = state.elements.slice().reverse().map((el, reverseIndex) => {
+    const order = state.elements.length - reverseIndex;
+    return `<button class="layer-row ${state.selectedIds.has(el.id) ? 'selected' : ''}" onclick="selectLayer('${escapeHtml(el.id)}', event.shiftKey)" title="Select ${escapeHtml(layerLabel(el))}">
+      <span class="layer-index">${order}</span><span class="layer-name">${escapeHtml(layerLabel(el))}</span>
+    </button>`;
+  }).join('');
+}
 
 function render(){
   renderPage();
   renderInspector();
+  renderLayers();
+  renderPresetSaveState();
   updateSchemaView();
 }
 
@@ -833,8 +883,10 @@ function updateNum(id, prop, value){
   if(!el || isNaN(num)) return;
   pushUndoDebounced('num:' + id + ':' + prop);
   el[prop] = num;
+  if(prop === 'x' || prop === 'y') clampElementPosition(el);
   applyElementStyle(id);
   updateSchemaView();
+  renderPresetSaveState();
 }
 function updateProp(id, prop, value){
   const el = getEl(id);
@@ -844,6 +896,7 @@ function updateProp(id, prop, value){
   if(prop === 'src' || prop === 'variant' || prop === 'logoRef' || prop === 'fill' || prop === 'stroke' || prop === 'strokeWidth'){ renderPage(); renderInspector(); }
   else applyElementStyle(id);
   updateSchemaView();
+  renderPresetSaveState();
 }
 
 function flipSelection(axis){
@@ -867,6 +920,7 @@ function onDataInput(field, value){
   updateBoundElementsContent(field);
   renderKonva();
   updateSchemaView();
+  renderPresetSaveState();
 }
 
 // ---------- selection ----------
@@ -1168,6 +1222,7 @@ document.addEventListener('mousemove', e => {
       if(!el || !start) return;
       el.x = round1(start.x + dxRaw + snapDX);
       el.y = round1(start.y + dyRaw + snapDY);
+      clampElementPosition(el);
       updateKonvaNodePosition(id);
       updateSelectionOverlayPosition(id);
     });
@@ -1292,6 +1347,7 @@ document.addEventListener('keydown', e => {
       const el = getEl(id); if(!el) return;
       el.x = round1(el.x + dx);
       el.y = round1(el.y + dy);
+      clampElementPosition(el);
     });
     renderPage();
     updateSchemaView();
@@ -1362,16 +1418,16 @@ async function uploadBrandImage(name, file){
 }
 async function deleteBrandImage(id){
   const img = brandImages.find(b => b.id === id);
+  if(db && img && img.dbId){
+    const { error } = await db.from('brand_images').delete().eq('id', img.dbId);
+    if(error){ alert('Could not delete the logo from the database: ' + error.message); return; }
+    await deleteCoverImage(img.storagePath);
+  }
   brandImages = brandImages.filter(b => b.id !== id);
   saveToStorage(LS_KEYS.brandImages, brandImages);
   renderBrandList();
   renderPage();
   renderInspector();
-  if(db && img && img.dbId){
-    const { error } = await db.from('brand_images').delete().eq('id', img.dbId);
-    if(error) console.warn('Could not delete brand image from the database', error);
-    await deleteCoverImage(img.storagePath);
-  }
 }
 function renderBrandList(){
   const box = document.getElementById('brandList');
@@ -1414,6 +1470,7 @@ function importTemplateFile(file){
         buildRulerLabels();
       }
       if(Array.isArray(obj.elements)) state.elements = obj.elements.map(normalizeImportedElement).filter(Boolean);
+      advanceIdCounter(state.elements);
       state.selectedIds = new Set();
       render();
     }catch(err){ alert('Could not read that template file: ' + err.message); }
@@ -1446,6 +1503,28 @@ function normalizeImportedElement(raw){
 }
 
 // ---------- preset library (persisted) ----------
+function loadedPresetHasChanges(){
+  const preset = presets.find(item => item.id === editingPresetId);
+  if(!preset) return false;
+  return JSON.stringify({ clientName:preset.clientName || '', page:preset.page, elements:preset.elements }) !==
+    JSON.stringify({ clientName:state.data.clientName || '', page:state.page, elements:state.elements });
+}
+function renderPresetSaveState(){
+  const button = document.getElementById('savePresetChangesBtn');
+  const status = document.getElementById('presetEditStatus');
+  const preset = presets.find(item => item.id === editingPresetId);
+  if(!button || !status) return;
+  if(!preset){
+    button.disabled = true;
+    status.textContent = 'Load a saved preset to edit and save it.';
+    return;
+  }
+  const dirty = loadedPresetHasChanges();
+  button.disabled = !dirty;
+  status.textContent = dirty
+    ? `Unsaved changes to “${preset.name}”.`
+    : `Editing “${preset.name}” — all changes are saved.`;
+}
 function seedDefaultPreset(){
   presets.push({ id:newId('preset'), name:'A4 Architecture Cover', clientName: state.data.clientName, page: JSON.parse(JSON.stringify(state.page)), elements: JSON.parse(JSON.stringify(state.elements)) });
 }
@@ -1463,12 +1542,14 @@ async function saveCurrentAsPreset(){
     }
   }
   presets.push(preset);
+  editingPresetId = preset.id;
   saveToStorage(LS_KEYS.presets, presets);
   renderSavedPresetsList();
   refreshPresetSelect();
   const sel = document.getElementById('cpPresetSelect');
   if(sel) sel.value = String(presets.length - 1);
   renderCreatePreview();
+  renderPresetSaveState();
   alert(`Saved "${name}" — it's now selectable on the Create project tab.`);
 }
 function loadPresetForEditing(id){
@@ -1477,7 +1558,10 @@ function loadPresetForEditing(id){
   editingPresetId = preset.id;
   state.page = JSON.parse(JSON.stringify(preset.page));
   state.elements = JSON.parse(JSON.stringify(preset.elements));
+  advanceIdCounter(state.elements);
   state.data.clientName = preset.clientName || state.data.clientName;
+  const clientNameInput = document.getElementById('data-clientName');
+  if(clientNameInput) clientNameInput.value = state.data.clientName;
   state.selectedIds = new Set();
   undoStack.length = 0;
   redoStack.length = 0;
@@ -1504,6 +1588,7 @@ async function updateLoadedPreset(){
   renderSavedPresetsList();
   refreshPresetSelect();
   renderCreatePreview();
+  renderPresetSaveState();
   alert(`Updated "${updated.name}".`);
 }
 async function deletePreset(id){
@@ -1516,6 +1601,8 @@ async function deletePreset(id){
     const { error } = await db.from('presets').delete().eq('id', id);
     if(error) console.warn('Could not delete preset from the database', error);
   }
+  if(editingPresetId === id) editingPresetId = null;
+  renderPresetSaveState();
 }
 function renderSavedPresetsList(){
   const box = document.getElementById('savedPresetsList');
@@ -1665,21 +1752,21 @@ function reprintProject(id){
 }
 async function deleteProject(id){
   const project = projects.find(p => p.id === id);
-  projects = projects.filter(p => p.id !== id);
-  saveToStorage(LS_KEYS.projects, projects);
-  renderProjectsList();
   if(db && project){
     if(project.dbId){
       const { error } = await db.from('projects').delete().eq('id', project.dbId);
-      if(error) console.warn('Could not delete project from the database', error);
+      if(error){ alert('Could not delete the project from the database: ' + error.message); return; }
     }
     await deleteCoverImage(project.projectImagePath);
   }
+  projects = projects.filter(p => p.id !== id);
+  saveToStorage(LS_KEYS.projects, projects);
+  renderProjectsList();
 }
-function generateCover(){
+async function generateCover(){
   const preset = getSelectedPreset();
   if(!preset) return;
-  recordProject(preset);
+  await recordProject(preset);
   updatePrintStyle(preset.page.width, preset.page.height);
   window.print();
 }
@@ -1808,6 +1895,11 @@ function finishDataInit(){
   render();
   switchTab('create');
 }
+
+// Signed URLs are deliberately short-lived. Renew them before they expire and
+// whenever the user returns to a long-lived tab.
+window.setInterval(() => { refreshSignedCoverImageUrls(); }, 45 * 60 * 1000);
+window.addEventListener('focus', () => { refreshSignedCoverImageUrls(); });
 
 function showAuthGate(){
   document.getElementById('authGate').style.display = 'flex';
