@@ -200,13 +200,23 @@
       </div>
     </aside>
 
-    <main class="canvas-wrapper">
+    <main class="canvas-wrapper create-canvas" id="createCanvas">
       <div class="preview-shell" id="previewShell">
         <div id="projectPage" class="print-target"></div>
       </div>
     </main>
 
     <aside class="sidebar sidebar-right no-print">
+      <div class="section">
+        <h2>Preview zoom</h2>
+        <div class="row-btns">
+          <button class="btn small zoom-control" onclick="changeCreateZoom(-0.1)" aria-label="Zoom out">−</button>
+          <span class="zoom-readout" id="createZoomReadout">100%</span>
+          <button class="btn small zoom-control" onclick="changeCreateZoom(0.1)" aria-label="Zoom in">+</button>
+          <button class="btn small" onclick="resetCreateZoom()">Reset</button>
+        </div>
+        <p class="hint" style="margin-top:12px">Use the mouse wheel over the preview to zoom.</p>
+      </div>
       <div class="section">
         <h2>Recent projects</h2>
         <div id="projectsList"></div>

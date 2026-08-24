@@ -154,6 +154,8 @@
   .dropzone:hover .replace-hint{opacity:1;}
   .preview-shell{width:360px;flex:0 0 auto;overflow:hidden;border:1px solid var(--border);background:var(--bg-canvas);position:relative;box-shadow:0 1px 3px rgba(23,22,20,.05);align-self:flex-start;}
   #projectPage{position:relative;background:#fff;transform-origin:top left;}
+  .create-canvas{justify-content:center;align-items:center;}
+  .create-canvas .preview-shell{align-self:auto;}
 
   /* ---------- print ---------- */
   @media print{

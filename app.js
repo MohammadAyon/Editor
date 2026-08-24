@@ -104,6 +104,7 @@ let presets = loadFromStorage(LS_KEYS.presets) || [];
 let brandImages = loadFromStorage(LS_KEYS.brandImages) || [];
 let projects = loadFromStorage(LS_KEYS.projects) || [];
 let editingPresetId = null;
+let createZoom = 1;
 const createData = { projectName:'Riverside Residence', location:'Chattogram, Bangladesh', clientName:'John Smith', projectImage:null, projectImageFile:null };
 
 let interaction = null;
@@ -1665,11 +1666,38 @@ function scalePreviewTo(pageEl, pageWidthMm, pageHeightMm){
   const shell = document.getElementById('previewShell');
   const mmToPx = 96 / 25.4;
   const pagePxWidth = pageWidthMm * mmToPx;
-  const scale = shell.clientWidth / pagePxWidth;
+  const baseWidth = 360;
+  const scale = (baseWidth / pagePxWidth) * createZoom;
   pageEl.style.width = pageWidthMm + 'mm';
   pageEl.style.height = pageHeightMm + 'mm';
   pageEl.style.transform = `scale(${scale})`;
-  shell.style.height = Math.round(pagePxWidth * (pageHeightMm / pageWidthMm) * scale) + 'px';
+  shell.style.width = `${Math.round(baseWidth * createZoom)}px`;
+  shell.style.height = `${Math.round(baseWidth * (pageHeightMm / pageWidthMm) * createZoom)}px`;
+}
+function updateCreateZoomReadout(){
+  const readout = document.getElementById('createZoomReadout');
+  if(readout) readout.textContent = Math.round(createZoom * 100) + '%';
+}
+function centerCreatePage(){
+  const canvas = document.getElementById('createCanvas');
+  const shell = document.getElementById('previewShell');
+  if(!canvas || !shell) return;
+  canvas.scrollLeft = Math.max(0, (shell.offsetWidth - canvas.clientWidth) / 2);
+  canvas.scrollTop = Math.max(0, (shell.offsetHeight - canvas.clientHeight) / 2);
+}
+function setCreateZoom(value){
+  const next = clamp(Math.round(value * 20) / 20, 0.25, 3);
+  if(next === createZoom) return;
+  createZoom = next;
+  renderCreatePreview();
+  updateCreateZoomReadout();
+}
+function changeCreateZoom(delta){ setCreateZoom(createZoom + delta); }
+function resetCreateZoom(){ setCreateZoom(1); }
+function onCreateCanvasWheel(event){
+  if(getActiveTab() !== 'create') return;
+  event.preventDefault();
+  setCreateZoom(createZoom * (event.deltaY < 0 ? 1.1 : 0.9));
 }
 function renderCreatePreview(){
   const preset = getSelectedPreset();
@@ -1677,6 +1705,7 @@ function renderCreatePreview(){
   if(!preset || !pageEl) return;
   pageEl.innerHTML = preset.elements.map(el => elementHTML(el, createData)).join('');
   scalePreviewTo(pageEl, preset.page.width, preset.page.height);
+  requestAnimationFrame(centerCreatePage);
 }
 
 // ---------- projects (connected to the preset that generated them) ----------
@@ -1829,7 +1858,8 @@ cpDropzoneEl.addEventListener('drop', e => {
   if(f) onCreatePhotoSelected(f);
 });
 
-document.querySelector('.canvas-wrapper').addEventListener('wheel', onCanvasWheel, { passive:false });
+document.querySelector('#viewEditor .canvas-wrapper').addEventListener('wheel', onCanvasWheel, { passive:false });
+document.getElementById('createCanvas').addEventListener('wheel', onCreateCanvasWheel, { passive:false });
 
 applyPageCSSVars();
 updatePrintStyle();
@@ -1839,6 +1869,7 @@ buildRulerLabels();
 refreshUndoRedoButtons();
 render();
 syncZoomLayout();
+updateCreateZoomReadout();
 
 async function initFromDatabase(runId){
   if(db && (!currentSession || (runId && runId !== databaseInitRun))) return;
