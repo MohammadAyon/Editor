@@ -259,8 +259,45 @@ function getEl(id){ return state.elements.find(e => e.id === id); }
 function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
 function round1(v){ return Math.round(v*10)/10; }
 function clampElementPosition(el){
-  el.x = round1(clamp(el.x, 0, Math.max(0, state.page.width - el.width)));
-  el.y = round1(clamp(el.y, 0, Math.max(0, state.page.height - heightOf(el))));
+  const node = konvaLayer && konvaLayer.findOne('#' + el.id);
+  if(!node){
+    // No live Konva node yet (e.g. called before the first render). Fall
+    // back to the old unrotated clamp rather than throw â€” rotation-aware
+    // clamping resumes automatically as soon as the node exists.
+    el.x = round1(clamp(el.x, 0, Math.max(0, state.page.width - el.width)));
+    el.y = round1(clamp(el.y, 0, Math.max(0, state.page.height - heightOf(el))));
+    return;
+  }
+
+  const pxPerMm = getPxPerMm();
+
+  // node.x()/node.y() sit at the element's LOCAL CENTER (see makeKonvaNode /
+  // updateKonvaNodePosition â€” true for every type, including line, whose
+  // points are already symmetric around its own local origin). getClientRect()
+  // reflects the node's CURRENT rotation/scale/flip/stroke as actually
+  // rendered right now. The offset between that box and the node's anchor
+  // is invariant under pure translation, so measuring it once here and
+  // reapplying it to the proposed position is exact regardless of angle â€”
+  // no per-angle special-casing needed.
+  const box = node.getClientRect({ skipStroke: false });
+  const offsetXpx = box.x - node.x();
+  const offsetYpx = box.y - node.y();
+
+  const proposedCenterXpx = mmToPx(el.x + el.width / 2);
+  const proposedCenterYpx = mmToPx(el.y + heightOf(el) / 2);
+  const proposedBoxXpx = proposedCenterXpx + offsetXpx;
+  const proposedBoxYpx = proposedCenterYpx + offsetYpx;
+
+  const canvasWpx = mmToPx(state.page.width);
+  const canvasHpx = mmToPx(state.page.height);
+  const clampedBoxXpx = clamp(proposedBoxXpx, 0, Math.max(0, canvasWpx - box.width));
+  const clampedBoxYpx = clamp(proposedBoxYpx, 0, Math.max(0, canvasHpx - box.height));
+
+  const clampedCenterXpx = clampedBoxXpx - offsetXpx;
+  const clampedCenterYpx = clampedBoxYpx - offsetYpx;
+
+  el.x = round1(clampedCenterXpx / pxPerMm - el.width / 2);
+  el.y = round1(clampedCenterYpx / pxPerMm - heightOf(el) / 2);
 }
 function advanceIdCounter(elements){
   (elements || []).forEach(el => {
