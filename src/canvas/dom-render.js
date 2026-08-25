@@ -148,10 +148,8 @@ export function applyElementStyle(id){
   }
   if(el.type === 'line'){
     updateKonvaNodePosition(id);
-    if(konvaLayer) konvaLayer.batchDraw();
-  } else {
-    renderKonva();
   }
+  renderKonva();
 }
 
 export function updateSelectionBBox(){

@@ -25,8 +25,13 @@ export function updateKonvaNodePosition(id){
   const el = getEl(id);
   const node = el && konvaLayer.findOne('#' + id);
   if(!el || !node) return;
+  const width = mmToPx(el.width);
   node.x(mmToPx(el.x + el.width / 2));
   node.y(mmToPx(el.y + heightOf(el) / 2));
+  if(el.type === 'line'){
+    node.offsetX(width / 2);
+    node.points([0, 0, width, 0]);
+  }
 }
 
 export function updateSelectionOverlayPosition(id){
@@ -52,7 +57,11 @@ export function getStagePointer(nativeEvent){
 
 export function resizeSnapBox(oldBox, newBox, selectedElement){
   const minWidth = mmToPx(5);
-  const minHeight = selectedElement && selectedElement.type === 'line' ? mmToPx(2) : mmToPx(5);
+  if(selectedElement && selectedElement.type === 'line'){
+    if(newBox.width < minWidth) return oldBox;
+    return newBox;
+  }
+  const minHeight = mmToPx(5);
   if(newBox.width < minWidth || newBox.height < minHeight) return oldBox;
 
   const rotation = Math.abs(Number(selectedElement && selectedElement.rotation) || 0) % 180;
@@ -101,12 +110,20 @@ export function makeKonvaNode(el){
   const visualHeight = height;
   let node;
   if(el.type === 'text'){
-    node = new Konva.Text({
-      text: konvaTextValue(el),
+    node = new Konva.Group({
       x: x + width / 2,
       y: y + visualHeight / 2,
       offsetX: width / 2,
       offsetY: visualHeight / 2,
+      width,
+      height,
+      clipX: 0, clipY: 0, clipWidth: width, clipHeight: height,
+      listening: true
+    });
+    node.add(new Konva.Text({
+      text: konvaTextValue(el),
+      x: 0,
+      y: 0,
       width,
       height,
       fontSize: el.fontSize,
@@ -114,18 +131,23 @@ export function makeKonvaNode(el){
       fontStyle: el.weight >= 600 ? 'bold' : 'normal',
       fill: '#171614',
       align: el.align,
-      listening: true
-    });
+      listening: false
+    }));
   } else if(el.type === 'line'){
     node = new Konva.Line({
-      points: [-width / 2, 0, width / 2, 0],
+      points: [0, 0, width, 0],
       x: x + width / 2,
       y,
+      offsetX: width / 2,
+      offsetY: 0,
+      width,
+      height: lineWidth(el),
       stroke: lineStroke(el),
       strokeWidth: lineWidth(el),
-      hitStrokeWidth: 16,
+      hitStrokeWidth: Math.max(16, lineWidth(el) + 12),
       lineCap: 'round',
       lineJoin: el.lineJoin || 'miter',
+      strokeScaleEnabled: false,
       listening: true
     });
   } else if(el.type === 'rect'){
@@ -150,6 +172,7 @@ export function makeKonvaNode(el){
       offsetY: visualHeight / 2,
       width,
       height,
+      clipX: 0, clipY: 0, clipWidth: width, clipHeight: height,
       listening: true
     });
     node.add(new Konva.Rect({ x:0, y:0, width, height, fill:'#EEEBE3', stroke:'#B4B0A4', dash:[4,3], listening:true }));
@@ -157,7 +180,31 @@ export function makeKonvaNode(el){
     if(src){
       const image = new Image();
       image.onload = () => {
-        node.add(new Konva.Image({ image, width, height, listening:false }));
+        const imgW = image.width, imgH = image.height;
+        if(imgW && imgH){
+          const isPhoto = el.role === 'photo';
+          const imgRatio = imgW / imgH;
+          const boxRatio = width / height;
+          let dw = width, dh = height, dx = 0, dy = 0;
+          if (isPhoto) {
+            if (imgRatio > boxRatio) {
+              dh = height; dw = height * imgRatio;
+              dx = (width - dw) / 2;
+            } else {
+              dw = width; dh = width / imgRatio;
+              dy = (height - dh) / 2;
+            }
+          } else {
+            if (imgRatio > boxRatio) {
+              dw = width; dh = width / imgRatio;
+              dy = (height - dh) / 2;
+            } else {
+              dh = height; dw = height * imgRatio;
+              dx = (width - dw) / 2;
+            }
+          }
+          node.add(new Konva.Image({ image, x: dx, y: dy, width: dw, height: dh, listening:false }));
+        }
         if(node.getLayer()) node.getLayer().batchDraw();
       };
       image.src = src;
@@ -243,7 +290,7 @@ export function renderKonva(){
         }
         if(isTransformerTarget){
           const targetName = typeof event.target.name === 'function' ? event.target.name() : '';
-          if(String(targetName).includes('anchor')) return;
+          if(String(targetName).includes('anchor') || String(targetName).includes('rotater')) return;
           const id = [...state.selectedIds][0];
           const selected = id && getEl(id);
           const pointer = getStagePointer(event.evt);
@@ -380,7 +427,7 @@ export function renderKonva(){
     borderStroke: '#171614',
     anchorStroke: '#171614',
     anchorFill: '#171614',
-    enabledAnchors: ['top-left','top-right','bottom-left','bottom-right'],
+    enabledAnchors: ['top-left','top-right','bottom-left','bottom-right','middle-left','middle-right'],
     boundBoxFunc: (oldBox, newBox) => resizeSnapBox(oldBox, newBox, getEl([...state.selectedIds][0]))
   });
   setKonvaTransformer(transformer);
@@ -388,9 +435,24 @@ export function renderKonva(){
   const selected = [...state.selectedIds].map(id => konvaLayer.findOne('#' + id)).filter(Boolean);
   if(selected.length === 1){
     const selectedElement = getEl(selected[0].id());
+    const isLine = selectedElement.type === 'line';
+    transformer.enabledAnchors(isLine
+      ? ['middle-left', 'middle-right']
+      : ['top-left', 'top-right', 'bottom-left', 'bottom-right']
+    );
+    transformer.ignoreStroke(!isLine);
     transformer.keepRatio(selectedElement.type === 'image' ? selectedElement.keepRatio !== false : selectedElement.keepRatio === true);
     transformer.nodes(selected);
     transformer.on('transformstart', pushUndo);
+    transformer.on('transform', () => {
+      const node = selected[0], el = getEl(node.id());
+      if(!el) return;
+      const scaleX = node.scaleX();
+      const absScaleX = Math.abs(scaleX);
+      const currentW = round1(clamp(el.width * absScaleX, 5, state.page.width));
+      const inspW = document.getElementById('insp-w');
+      if(inspW && document.activeElement !== inspW) inspW.value = currentW;
+    });
     transformer.on('transformend', () => {
       const node = selected[0], el = getEl(node.id());
       if(!el) return;
@@ -400,16 +462,20 @@ export function renderKonva(){
       if(el.type !== 'line') el.height = round1(clamp(el.height * absScaleY, 5, state.page.height));
       el.rotation = round1(node.rotation());
       if(el.type === 'line'){
-        el.x = round1(node.x() / getPxPerMm() - el.width / 2);
-        el.y = round1(node.y() / getPxPerMm());
+        const wpx = mmToPx(el.width);
+        node.offsetX(wpx / 2);
+        node.points([0, 0, wpx, 0]);
+        node.scale({ x: 1, y: 1 });
+        el.x = round1(clamp(node.x() / getPxPerMm() - el.width / 2, 0, state.page.width - el.width));
+        el.y = round1(clamp(node.y() / getPxPerMm(), 0, state.page.height));
         clampElementPosition(el);
       } else {
+        node.scale({ x: 1, y: 1 });
         el.x = round1(clamp(node.x() / getPxPerMm() - el.width / 2, 0, state.page.width - el.width));
         el.y = round1(clamp(node.y() / getPxPerMm() - heightOf(el) / 2, 0, state.page.height - heightOf(el)));
       }
       el.flipX = scaleX < 0;
       el.flipY = scaleY < 0;
-      node.scale({ x:1, y:1 });
       if(window.render) window.render();
     });
     konvaLayer.add(transformer);

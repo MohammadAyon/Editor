@@ -39,6 +39,10 @@ export function seedDefaultPreset(){
 }
 
 export async function saveCurrentAsPreset(){
+  if(presets.length >= 10){
+    alert('You have reached the maximum limit of 10 presets. Please delete an existing preset to save a new one.');
+    return;
+  }
   const name = prompt('Name this preset:', 'Untitled preset');
   if(!name) return;
   const preset = {
