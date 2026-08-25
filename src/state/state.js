@@ -1,4 +1,4 @@
-﻿// src/state/state.js â€” shared application state, pure helpers, undo/redo
+// src/state/state.js â€” shared application state, pure helpers, undo/redo
 import { loadFromStorage, LS_KEYS } from '../data/storage.js';
 
 // ---------- ID counter ----------
@@ -132,6 +132,7 @@ export function redo(){
   if(window.render) window.render();
 }
 export function refreshUndoRedoButtons(){
+  if(typeof document === 'undefined') return;
   const u = document.getElementById('btnUndo'), r = document.getElementById('btnRedo');
   if(u) u.disabled = undoStack.length === 0;
   if(r) r.disabled = redoStack.length === 0;

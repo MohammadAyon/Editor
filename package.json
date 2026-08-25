@@ -1,4 +1,5 @@
 {
+  "type": "module",
   "dependencies": {
     "konva": "^10.3.1"
   }

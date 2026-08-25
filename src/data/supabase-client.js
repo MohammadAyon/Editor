@@ -1,5 +1,5 @@
-﻿// src/data/supabase-client.js â€” Supabase client, session, raw DB/storage ops
-export const db = (window.SUPABASE_CONFIG && window.supabase)
+// src/data/supabase-client.js â€” Supabase client, session, raw DB/storage ops
+export const db = (typeof window !== 'undefined' && window.SUPABASE_CONFIG && window.supabase)
   ? window.supabase.createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.anonKey)
   : null;
 
