@@ -120,6 +120,14 @@ export function makeKonvaNode(el){
       clipX: 0, clipY: 0, clipWidth: width, clipHeight: height,
       listening: true
     });
+    node.add(new Konva.Rect({
+      x: 0,
+      y: 0,
+      width,
+      height,
+      fill: 'rgba(0,0,0,0.001)',
+      listening: true
+    }));
     node.add(new Konva.Text({
       text: konvaTextValue(el),
       x: 0,
@@ -131,7 +139,7 @@ export function makeKonvaNode(el){
       fontStyle: el.weight >= 600 ? 'bold' : 'normal',
       fill: '#171614',
       align: el.align,
-      listening: false
+      listening: true
     }));
   } else if(el.type === 'line'){
     node = new Konva.Line({
@@ -506,7 +514,7 @@ export function triggerImageUpload(id){
   hiddenImageInput.click();
 }
 
-if(location.hostname === 'localhost' || location.hostname === '127.0.0.1'){
+if(typeof location !== 'undefined' && (location.hostname === 'localhost' || location.hostname === '127.0.0.1')){
   window.getEditorDiagnostics = () => ({
     stageNodes: konvaStage ? Array.from(konvaStage.getChildren()).reduce((count, layer) => count + 1 + layer.getChildren().length, 0) : 0,
     layerCount: konvaStage ? konvaStage.getLayers().length : 0,

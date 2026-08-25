@@ -60,6 +60,12 @@ export function overlayHTML(){
 }
 
 export function clampElementPosition(el){
+  const rot = Math.abs(Number(el.rotation) || 0) % 360;
+  if(rot < 0.1 || Math.abs(rot - 360) < 0.1){
+    el.x = round1(clamp(el.x, 0, Math.max(0, state.page.width - el.width)));
+    el.y = round1(clamp(el.y, 0, Math.max(0, state.page.height - heightOf(el))));
+    return;
+  }
   const node = konvaLayer && konvaLayer.findOne('#' + el.id);
   if(!node){
     el.x = round1(clamp(el.x, 0, Math.max(0, state.page.width - el.width)));
