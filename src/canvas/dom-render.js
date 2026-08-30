@@ -9,6 +9,21 @@ export function rectStroke(el){ return el.stroke || '#171614'; }
 export function lineStroke(el){ return el.stroke || '#171614'; }
 export function lineWidth(el){ return Number.isFinite(el.strokeWidth) ? el.strokeWidth : 1; }
 
+// Builds the CSS text for optional typography overrides on a text element.
+// Anything left unset here falls back to the variant's CSS class default.
+function textTypographyCSS(el){
+  const familyVar = el.fontFamily === 'sans' ? 'var(--font-sans)' : el.fontFamily === 'display' ? 'var(--font-display)' : el.fontFamily === 'mono' ? 'var(--font-mono)' : '';
+  let css = '';
+  if(familyVar) css += `font-family:${familyVar};`;
+  if(el.italic) css += `font-style:italic;`;
+  if(el.underline) css += `text-decoration:underline;`;
+  if(Number.isFinite(el.letterSpacing)) css += `letter-spacing:${el.letterSpacing}em;`;
+  if(Number.isFinite(el.lineHeight)) css += `line-height:${el.lineHeight};`;
+  if(el.textTransform && el.textTransform !== 'none') css += `text-transform:${el.textTransform};`;
+  if(el.color) css += `color:${el.color};`;
+  return css;
+}
+
 export function resolveImageSrc(el, dataSource){
   if(el.role === 'logo'){
     const brand = brandImages.find(b => b.id === el.logoRef);
@@ -25,7 +40,7 @@ export function elementHTML(el, dataSource){
     const value = el.field ? (dataSource[el.field] || '') : (el.content || '');
     const text = (el.prefix || '') + value;
     const variantClass = el.variant === 'display' ? 'el-text--display' : el.variant === 'label' ? 'el-text--label' : '';
-    return `<div class="element el-text ${variantClass}" data-id="${el.id}" style="${style}font-size:${el.fontSize}px;font-weight:${el.weight};text-align:${el.align};">${escapeHtml(text)}</div>`;
+    return `<div class="element el-text ${variantClass}" data-id="${el.id}" style="${style}font-size:${el.fontSize}px;font-weight:${el.weight};text-align:${el.align};${textTypographyCSS(el)}">${escapeHtml(text)}</div>`;
   }
   if(el.type === 'image'){
     const src = resolveImageSrc(el, dataSource);
@@ -60,12 +75,6 @@ export function overlayHTML(){
 }
 
 export function clampElementPosition(el){
-  const rot = Math.abs(Number(el.rotation) || 0) % 360;
-  if(rot < 0.1 || Math.abs(rot - 360) < 0.1){
-    el.x = round1(clamp(el.x, 0, Math.max(0, state.page.width - el.width)));
-    el.y = round1(clamp(el.y, 0, Math.max(0, state.page.height - heightOf(el))));
-    return;
-  }
   const node = konvaLayer && konvaLayer.findOne('#' + el.id);
   if(!node){
     el.x = round1(clamp(el.x, 0, Math.max(0, state.page.width - el.width)));
@@ -136,6 +145,13 @@ export function applyElementStyle(id){
     node.style.fontSize = el.fontSize + 'px';
     node.style.fontWeight = el.weight;
     node.style.textAlign = el.align;
+    node.style.fontFamily = el.fontFamily === 'sans' ? 'var(--font-sans)' : el.fontFamily === 'display' ? 'var(--font-display)' : el.fontFamily === 'mono' ? 'var(--font-mono)' : '';
+    node.style.fontStyle = el.italic ? 'italic' : '';
+    node.style.textDecoration = el.underline ? 'underline' : '';
+    node.style.letterSpacing = Number.isFinite(el.letterSpacing) ? el.letterSpacing + 'em' : '';
+    node.style.lineHeight = Number.isFinite(el.lineHeight) ? el.lineHeight : '';
+    node.style.textTransform = (el.textTransform && el.textTransform !== 'none') ? el.textTransform : '';
+    node.style.color = el.color || '';
     if(document.activeElement !== node){
       const value = el.field ? (state.data[el.field] || '') : (el.content || '');
       node.textContent = (el.prefix || '') + value;
@@ -154,8 +170,10 @@ export function applyElementStyle(id){
   }
   if(el.type === 'line'){
     updateKonvaNodePosition(id);
+    if(konvaLayer) konvaLayer.batchDraw();
+  } else {
+    renderKonva();
   }
-  renderKonva();
 }
 
 export function updateSelectionBBox(){

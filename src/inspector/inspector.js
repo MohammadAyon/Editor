@@ -51,7 +51,7 @@ export function updateProp(id, prop, value){
   if(!el) return;
   pushUndoDebounced('prop:' + id + ':' + prop);
   el[prop] = value;
-  if(prop === 'src' || prop === 'variant' || prop === 'logoRef' || prop === 'fill' || prop === 'stroke' || prop === 'strokeWidth'){
+  if(prop === 'src' || prop === 'variant' || prop === 'logoRef' || prop === 'fill' || prop === 'stroke' || prop === 'strokeWidth' || prop === 'field'){
     renderPage();
     renderInspector();
   } else {
@@ -127,8 +127,38 @@ export function renderInspector(){
           <select onchange="updateProp('${el.id}','align',this.value)">
             ${['left','center','right'].map(a => `<option value="${a}" ${a===el.align?'selected':''}>${a}</option>`).join('')}
           </select>
+        </div>
+        <div class="field"><label>Font family</label>
+          <select onchange="updateProp('${el.id}','fontFamily',this.value || null)">
+            <option value="" ${!el.fontFamily ? 'selected' : ''}>Match style default</option>
+            <option value="sans" ${el.fontFamily==='sans' ? 'selected' : ''}>Sans (Inter)</option>
+            <option value="display" ${el.fontFamily==='display' ? 'selected' : ''}>Serif (Fraunces)</option>
+            <option value="mono" ${el.fontFamily==='mono' ? 'selected' : ''}>Mono (IBM Plex Mono)</option>
+          </select>
+        </div>
+        <div class="field"><label>Letter spacing (em)</label><input type="number" step="0.01" min="-0.1" max="0.5" value="${Number.isFinite(el.letterSpacing) ? el.letterSpacing : 0}" oninput="updateProp('${el.id}','letterSpacing',parseFloat(this.value))"></div>
+        <div class="field"><label>Line height</label><input type="number" step="0.05" min="0.8" max="3" value="${Number.isFinite(el.lineHeight) ? el.lineHeight : 1.2}" oninput="updateProp('${el.id}','lineHeight',parseFloat(this.value))"></div>
+        <div class="field"><label>Case</label>
+          <select onchange="updateProp('${el.id}','textTransform',this.value)">
+            ${['none','uppercase','lowercase','capitalize'].map(t => `<option value="${t}" ${(el.textTransform||'none')===t ? 'selected' : ''}>${t.charAt(0).toUpperCase()+t.slice(1)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field color-field"><label>Text color</label><input type="color" value="${el.color || (el.variant==='label' ? '#7A776E' : '#171614')}" onchange="updateProp('${el.id}','color',this.value)"></div>
+        <div class="field">
+          <label class="check-row"><input type="checkbox" ${el.italic ? 'checked' : ''} onchange="updateProp('${el.id}','italic',this.checked)"> Italic</label>
+          <label class="check-row" style="margin-top:6px"><input type="checkbox" ${el.underline ? 'checked' : ''} onchange="updateProp('${el.id}','underline',this.checked)"> Underline</label>
+        </div>`;
+      html += `
+        <div class="field"><label>Data field</label>
+          <select onchange="updateProp('${el.id}','field',this.value || null)">
+            <option value="" ${!el.field ? 'selected' : ''}>Custom text</option>
+            <option value="projectName" ${el.field==='projectName' ? 'selected' : ''}>Project name</option>
+            <option value="location" ${el.field==='location' ? 'selected' : ''}>Location</option>
+            <option value="clientName" ${el.field==='clientName' ? 'selected' : ''}>Client name</option>
+          </select>
         </div>`;
       if(el.field){
+        html += `<div class="field"><label>Prefix</label><input type="text" value="${escapeHtml(el.prefix||'')}" oninput="updateProp('${el.id}','prefix',this.value)"></div>`;
         html += `<div class="bound-note">Bound to data field <strong>${el.field}</strong> — edit its value in the Project data panel.</div>`;
       } else {
         html += `<div class="field"><label>Content</label><textarea oninput="updateProp('${el.id}','content',this.value)">${escapeHtml(el.content||'')}</textarea></div>`;

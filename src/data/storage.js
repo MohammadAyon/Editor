@@ -2,7 +2,8 @@
 export const LS_KEYS = {
   presets:     'coverGenerator:presets',
   brandImages: 'coverGenerator:brandImages',
-  projects:    'coverGenerator:projects'
+  projects:    'coverGenerator:projects',
+  debugMode:   'coverGenerator:debugMode'
 };
 
 export function loadFromStorage(key){

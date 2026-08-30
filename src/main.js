@@ -3,7 +3,7 @@ import {
   db, currentSession, setCurrentSession, databaseInitRun, incrementDatabaseInitRun,
   signedCoverImageUrl, presetFromRow, presetToRow, brandImageFromRow, projectFromRow
 } from './data/supabase-client.js';
-import { saveToStorage, LS_KEYS } from './data/storage.js';
+import { saveToStorage, loadFromStorage, LS_KEYS } from './data/storage.js';
 import {
   state, presets, setPresets, brandImages, setBrandImages, projects, setProjects,
   createData, undo, redo, refreshUndoRedoButtons
@@ -47,6 +47,22 @@ import {
 export function getActiveTab(){
   const createView = document.getElementById('viewCreate');
   return (!createView || createView.style.display === 'none') ? 'editor' : 'create';
+}
+
+// Debug mode gates the raw JSON schema panel — off by default, persisted per browser.
+export function setDebugMode(on){
+  const section = document.getElementById('schemaSection');
+  if(section) section.style.display = on ? '' : 'none';
+  const btn = document.getElementById('btnToggleDebug');
+  if(btn) btn.textContent = on ? 'Debug: On' : 'Debug: Off';
+  saveToStorage(LS_KEYS.debugMode, on);
+  if(on) updateSchemaView();
+}
+
+export function toggleDebugMode(){
+  const section = document.getElementById('schemaSection');
+  const isOn = !!section && section.style.display !== 'none';
+  setDebugMode(!isOn);
 }
 
 export function switchTab(tab){
@@ -155,45 +171,44 @@ export function finishDataInit(){
 }
 
 // Attach all functions to window for index.html inline attributes & templates
-if(typeof window !== 'undefined'){
-  Object.assign(window, {
-    // Auth
-    handleSignIn, handleSignOut, showAuthGate, showAppShell,
-    // Navigation & tabs
-    switchTab, getActiveTab,
-    // Undo/redo
-    undo, redo,
-    // Zoom
-    changeZoom, resetZoom, setZoom,
-    changeCreateZoom, resetCreateZoom, setCreateZoom,
-    // Page size & config
-    onPageSizeChange, syncPageConfig,
-    // Elements & selection
-    addElement, selectOnly, toggleSelect, clearSelection, selectAll,
-    deleteSelection, duplicateSelection, bringSelectionToFront, sendSelectionToBack,
-    bringSelectionForward, sendSelectionBackward, centerSelectionH, centerSelectionV,
-    alignSelection, distributeSelection, flipSelection, rotateSelection, positionSelection,
-    // Data input & inspector
-    onDataInput, updateNum, updateProp, setImageRatioPreset, applyCustomImageRatio,
-    selectLayer, triggerImageUpload,
-    // Brand assets
-    triggerBrandUpload, onBrandFileSelected, deleteBrandImage, uploadBrandImage,
-    // Presets
-    saveCurrentAsPreset, loadPresetForEditing, updateLoadedPreset, deletePreset,
-    renderSavedPresetsList, refreshPresetSelect,
-    // Projects
-    onCreateFieldInput, triggerCreatePhotoUpload, onCreatePhotoSelected,
-    onCreatePresetChange, generateCover, reprintProject, deleteProject,
-    // Template IO
-    exportTemplate, importTemplateFile,
-    // Rendering
-    render, renderPage, renderInspector, renderLayers, renderPresetSaveState,
-    updateSchemaView, renderCreatePreview, renderProjectsList, renderBrandList
-  });
-}
+Object.assign(window, {
+  // Auth
+  handleSignIn, handleSignOut, showAuthGate, showAppShell,
+  // Navigation & tabs
+  switchTab, getActiveTab,
+  // Undo/redo
+  undo, redo,
+  // Zoom
+  changeZoom, resetZoom, setZoom,
+  changeCreateZoom, resetCreateZoom, setCreateZoom,
+  // Page size & config
+  onPageSizeChange, syncPageConfig,
+  // Elements & selection
+  addElement, selectOnly, toggleSelect, clearSelection, selectAll,
+  deleteSelection, duplicateSelection, bringSelectionToFront, sendSelectionToBack,
+  bringSelectionForward, sendSelectionBackward, centerSelectionH, centerSelectionV,
+  alignSelection, distributeSelection, flipSelection, rotateSelection, positionSelection,
+  // Data input & inspector
+  onDataInput, updateNum, updateProp, setImageRatioPreset, applyCustomImageRatio,
+  selectLayer, triggerImageUpload,
+  // Brand assets
+  triggerBrandUpload, onBrandFileSelected, deleteBrandImage, uploadBrandImage,
+  // Presets
+  saveCurrentAsPreset, loadPresetForEditing, updateLoadedPreset, deletePreset,
+  renderSavedPresetsList, refreshPresetSelect,
+  // Projects
+  onCreateFieldInput, triggerCreatePhotoUpload, onCreatePhotoSelected,
+  onCreatePresetChange, generateCover, reprintProject, deleteProject,
+  // Template IO
+  exportTemplate, importTemplateFile,
+  // Rendering
+  render, renderPage, renderInspector, renderLayers, renderPresetSaveState,
+  updateSchemaView, renderCreatePreview, renderProjectsList, renderBrandList,
+  // Debug
+  toggleDebugMode
+});
 
 function init(){
-  if(typeof document === 'undefined') return;
   const dataProjectName = document.getElementById('data-projectName');
   const dataLocation = document.getElementById('data-location');
   const dataClientName = document.getElementById('data-clientName');
@@ -228,14 +243,13 @@ function init(){
   initCanvasEvents();
   syncPageConfig();
   refreshUndoRedoButtons();
+  setDebugMode(!!loadFromStorage(LS_KEYS.debugMode));
   render();
   syncZoomLayout();
   updateCreateZoomReadout();
 
-  if(typeof window !== 'undefined'){
-    window.setInterval(() => { refreshSignedCoverImageUrls(); }, 45 * 60 * 1000);
-    window.addEventListener('focus', () => { refreshSignedCoverImageUrls(); });
-  }
+  window.setInterval(() => { refreshSignedCoverImageUrls(); }, 45 * 60 * 1000);
+  window.addEventListener('focus', () => { refreshSignedCoverImageUrls(); });
 
   if(db){
     showAuthGate();
@@ -255,10 +269,8 @@ function init(){
   }
 }
 
-if(typeof document !== 'undefined'){
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
 }
