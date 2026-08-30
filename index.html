@@ -3,6 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Cover generator</title>
   <!-- Strict script CSP is deferred until inline event attributes are migrated. -->
   <meta http-equiv="Content-Security-Policy"
@@ -23,7 +24,7 @@
       <h1>Sign in to continue</h1>
       <div class="field">
         <label for="authEmail">Email</label>
-        <input id="authEmail" type="email" autocomplete="username" required>
+        <input id="authEmail" type="email" autocomplete="username" required value="mohammadayon2838@gmail.com">
       </div>
       <div class="field">
         <label for="authPassword">Password</label>
@@ -65,7 +66,7 @@
         <div class="section">
           <h2>Page</h2>
           <div class="field">
-            <label>Size &amp; orientation</label>
+            <label>Size & orientation</label>
             <select id="pageSizeSelect" onchange="onPageSizeChange(this.value)">
               <option value="A4-portrait">A4 Portrait</option>
               <option value="A4-landscape">A4 Landscape</option>

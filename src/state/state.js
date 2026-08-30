@@ -23,8 +23,8 @@ export const state = {
     { id:'el_image',    type:'image', role:'photo', field:'projectImage', x:20, y:20,  width:170, height:170 },
     { id:'el_divider',  type:'line',  x:20, y:200, width:170, height:0 },
     { id:'el_title',    type:'text',  field:'projectName', prefix:'',            x:20, y:208, width:170, height:14, fontSize:30, weight:500, align:'center', variant:'display' },
-    { id:'el_location', type:'text',  field:'location',    prefix:'Location â€” ', x:20, y:228, width:170, height:8,  fontSize:10, weight:500, align:'left',   variant:'label' },
-    { id:'el_client',   type:'text',  field:'clientName',  prefix:'Client â€” ',   x:20, y:240, width:170, height:8,  fontSize:10, weight:500, align:'left',   variant:'label' }
+    { id:'el_location', type:'text',  field:'location',    prefix:'Location” ', x:20, y:228, width:170, height:8,  fontSize:10, weight:500, align:'left',   variant:'label' },
+    { id:'el_client',   type:'text',  field:'clientName',  prefix:'Client” ',   x:20, y:240, width:170, height:8,  fontSize:10, weight:500, align:'left',   variant:'label' }
   ],
   selectedIds: new Set()
 };
