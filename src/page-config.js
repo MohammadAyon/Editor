@@ -70,4 +70,5 @@ export function onPageSizeChange(value){
   syncPageConfig();
   if(window.render) window.render();
   centerZoomedPage();
+  if(window.syncMobileLayout) window.syncMobileLayout({ fit: true });
 }

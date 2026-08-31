@@ -138,6 +138,8 @@
         </div>
       </aside>
 
+      <div class="mobile-panel-scrim no-print" onclick="closeMobilePanel()" aria-hidden="true"></div>
+
       <main class="canvas-wrapper">
         <div class="page-frame">
           <div class="ruler-corner no-print"></div>
@@ -215,6 +217,8 @@
         </div>
       </aside>
 
+      <div class="mobile-panel-scrim no-print" onclick="closeMobilePanel()" aria-hidden="true"></div>
+
       <main class="canvas-wrapper create-canvas" id="createCanvas">
         <div class="preview-shell" id="previewShell">
           <div id="projectPage" class="print-target"></div>
@@ -238,6 +242,13 @@
         </div>
       </aside>
 
+    </div>
+
+    <div class="mobile-toolbar no-print" aria-label="Mobile editor controls">
+      <button class="mobile-tool-btn" id="mobileLeftPanelBtn" type="button" onclick="openMobilePanel('left')">Tools</button>
+      <button class="mobile-tool-btn" id="mobileFitBtn" type="button" onclick="fitActiveView()">Fit</button>
+      <button class="mobile-tool-btn" id="mobileCanvasBtn" type="button" onclick="closeMobilePanel()">Canvas</button>
+      <button class="mobile-tool-btn" id="mobileRightPanelBtn" type="button" onclick="openMobilePanel('right')">Inspect</button>
     </div>
 
   </div>

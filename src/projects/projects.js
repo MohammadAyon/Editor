@@ -45,6 +45,7 @@ export function onCreatePresetChange(){
     if(input) input.value = createData.clientName;
   }
   renderCreatePreview();
+  if(window.syncMobileLayout) window.syncMobileLayout({ fit: true });
 }
 
 export function scalePreviewTo(pageEl, pageWidthMm, pageHeightMm){

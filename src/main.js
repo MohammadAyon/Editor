@@ -49,6 +49,120 @@ export function getActiveTab(){
   return (!createView || createView.style.display === 'none') ? 'editor' : 'create';
 }
 
+const MOBILE_QUERY = '(max-width: 860px)';
+let mobileResizeTimer = null;
+
+export function isMobileLayout(){
+  return window.matchMedia(MOBILE_QUERY).matches;
+}
+
+export function syncMobileActiveView(){
+  const activeTab = getActiveTab();
+  const viewEditor = document.getElementById('viewEditor');
+  const viewCreate = document.getElementById('viewCreate');
+  if(viewEditor) viewEditor.classList.toggle('mobile-active-view', activeTab === 'editor');
+  if(viewCreate) viewCreate.classList.toggle('mobile-active-view', activeTab === 'create');
+}
+
+function updateMobileToolbarLabels(){
+  const activeTab = getActiveTab();
+  const leftBtn = document.getElementById('mobileLeftPanelBtn');
+  const rightBtn = document.getElementById('mobileRightPanelBtn');
+  if(leftBtn) leftBtn.textContent = activeTab === 'editor' ? 'Tools' : 'Project';
+  if(rightBtn) rightBtn.textContent = activeTab === 'editor' ? 'Inspect' : 'Recent';
+}
+
+function updateMobileToolbarState(){
+  const shell = document.getElementById('appShell');
+  const panel = shell ? shell.dataset.mobilePanel || '' : '';
+  const leftBtn = document.getElementById('mobileLeftPanelBtn');
+  const rightBtn = document.getElementById('mobileRightPanelBtn');
+  const canvasBtn = document.getElementById('mobileCanvasBtn');
+  if(leftBtn){
+    leftBtn.classList.toggle('active', panel === 'left');
+    leftBtn.setAttribute('aria-expanded', panel === 'left' ? 'true' : 'false');
+  }
+  if(rightBtn){
+    rightBtn.classList.toggle('active', panel === 'right');
+    rightBtn.setAttribute('aria-expanded', panel === 'right' ? 'true' : 'false');
+  }
+  if(canvasBtn) canvasBtn.classList.toggle('active', !panel);
+}
+
+function setMobilePanel(panel){
+  const shell = document.getElementById('appShell');
+  if(!shell) return;
+  const next = panel === 'left' || panel === 'right' ? panel : '';
+  shell.dataset.mobilePanel = next;
+  shell.classList.toggle('mobile-panel-open', !!next);
+  shell.classList.toggle('mobile-panel-left', next === 'left');
+  shell.classList.toggle('mobile-panel-right', next === 'right');
+  updateMobileToolbarState();
+}
+
+export function openMobilePanel(panel){
+  if(!isMobileLayout()) return;
+  setMobilePanel(panel);
+}
+
+export function closeMobilePanel(){
+  setMobilePanel('');
+}
+
+export function fitEditorView(){
+  const wrapper = document.querySelector('#viewEditor .canvas-wrapper');
+  const page = document.getElementById('page');
+  if(!wrapper || !page) return;
+  const availableWidth = Math.max(160, wrapper.clientWidth - 36);
+  const availableHeight = Math.max(220, wrapper.clientHeight - 42);
+  const offset = isMobileLayout() ? 0 : 16;
+  const targetZoom = Math.min(
+    availableWidth / Math.max(1, page.offsetWidth + offset),
+    availableHeight / Math.max(1, page.offsetHeight + offset),
+    1
+  );
+  setZoom(Math.max(0.25, targetZoom));
+}
+
+export function fitCreateView(){
+  const preset = getSelectedPreset();
+  const canvas = document.getElementById('createCanvas');
+  if(!preset || !canvas) return;
+  const baseWidth = 360;
+  const baseHeight = baseWidth * (preset.page.height / preset.page.width);
+  const availableWidth = Math.max(160, canvas.clientWidth - 36);
+  const availableHeight = Math.max(220, canvas.clientHeight - 42);
+  const targetZoom = Math.min(availableWidth / baseWidth, availableHeight / baseHeight, 1);
+  setCreateZoom(Math.max(0.25, targetZoom));
+  requestAnimationFrame(centerCreatePage);
+}
+
+export function fitActiveView(){
+  if(getActiveTab() === 'editor') fitEditorView();
+  else fitCreateView();
+}
+
+export function syncMobileLayout(options = {}){
+  const shell = document.getElementById('appShell');
+  const mobile = isMobileLayout();
+  if(shell) shell.classList.toggle('is-mobile-layout', mobile);
+  syncMobileActiveView();
+  updateMobileToolbarLabels();
+  if(!mobile) closeMobilePanel();
+  else updateMobileToolbarState();
+  if(mobile && options.fit) requestAnimationFrame(fitActiveView);
+}
+
+function onViewportResize(){
+  if(mobileResizeTimer) window.clearTimeout(mobileResizeTimer);
+  mobileResizeTimer = window.setTimeout(() => {
+    const active = document.activeElement;
+    const tag = active && active.tagName;
+    const typing = active && (active.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT');
+    syncMobileLayout({ fit: isMobileLayout() && !typing });
+  }, 120);
+}
+
 // Debug mode gates the raw JSON schema panel — off by default, persisted per browser.
 export function setDebugMode(on){
   const section = document.getElementById('schemaSection');
@@ -86,6 +200,8 @@ export function switchTab(tab){
     const preset = getSelectedPreset();
     if(preset) updatePrintStyle(preset.page.width, preset.page.height);
   }
+  closeMobilePanel();
+  syncMobileLayout({ fit: isMobileLayout() });
 }
 
 export function render(){
@@ -201,6 +317,8 @@ Object.assign(window, {
   onCreatePresetChange, generateCover, reprintProject, deleteProject,
   // Template IO
   exportTemplate, importTemplateFile,
+  // Mobile layout
+  openMobilePanel, closeMobilePanel, fitActiveView, fitEditorView, fitCreateView, syncMobileLayout,
   // Rendering
   render, renderPage, renderInspector, renderLayers, renderPresetSaveState,
   updateSchemaView, renderCreatePreview, renderProjectsList, renderBrandList,
@@ -247,6 +365,8 @@ function init(){
   render();
   syncZoomLayout();
   updateCreateZoomReadout();
+  syncMobileLayout({ fit: isMobileLayout() });
+  window.addEventListener('resize', onViewportResize);
 
   window.setInterval(() => { refreshSignedCoverImageUrls(); }, 45 * 60 * 1000);
   window.addEventListener('focus', () => { refreshSignedCoverImageUrls(); });

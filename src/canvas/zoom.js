@@ -12,21 +12,28 @@ export function updateZoomReadout(){
   if(readout) readout.textContent = Math.round(state.zoom * 100) + '%';
 }
 
+function rulerOffset(){
+  return window.matchMedia('(max-width: 860px)').matches ? 0 : 16;
+}
+
 export function syncZoomLayout(){
   const page = document.getElementById('page');
   const frame = page && page.parentElement;
   if(!page || !frame) return;
-  frame.style.width = `${16 + page.offsetWidth * state.zoom}px`;
-  frame.style.height = `${16 + page.offsetHeight * state.zoom}px`;
+  const offset = rulerOffset();
+  frame.style.width = `${offset + page.offsetWidth * state.zoom}px`;
+  frame.style.height = `${offset + page.offsetHeight * state.zoom}px`;
 }
 
 export function centerZoomedPage(){
   const wrapper = document.querySelector('.canvas-wrapper');
   const frame = document.querySelector('.page-frame');
   if(!wrapper || !frame) return;
-  const innerWidth = wrapper.clientWidth - 64;
+  const mobile = window.matchMedia('(max-width: 860px)').matches;
+  const innerWidth = wrapper.clientWidth - (mobile ? 32 : 64);
+  const innerHeight = wrapper.clientHeight - (mobile ? 48 : 112);
   wrapper.scrollLeft = Math.max(0, (frame.offsetWidth - innerWidth) / 2);
-  wrapper.scrollTop = Math.max(0, (frame.offsetHeight - (wrapper.clientHeight - 112)) / 2);
+  wrapper.scrollTop = Math.max(0, (frame.offsetHeight - innerHeight) / 2);
 }
 
 export function setZoom(value, clientX, clientY){
