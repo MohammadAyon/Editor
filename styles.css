@@ -172,23 +172,24 @@
 
   /* ---------- mobile layout ---------- */
   @media (max-width:860px){
-    html,body{overflow:hidden;}
+    html,body{width:100%;max-width:100%;overflow:hidden;}
+    #appShell{width:100%;max-width:100%;}
 
     .auth-panel{width:min(360px,calc(100% - 28px));padding:26px;}
 
-    .topbar{height:auto;min-height:0;flex:0 0 auto;display:grid;grid-template-columns:1fr;gap:8px;align-items:stretch;padding:10px 12px;background:var(--bg-panel);position:relative;z-index:12;}
-    .topbar-left{width:100%;justify-content:space-between;align-items:center;gap:8px;}
+    .topbar{width:100%;max-width:100%;height:auto;min-height:0;flex:0 0 auto;display:grid;grid-template-columns:minmax(0,1fr);gap:8px;align-items:stretch;padding:10px 12px;background:var(--bg-panel);position:relative;z-index:12;overflow:hidden;}
+    .topbar-left{width:100%;min-width:0;justify-content:space-between;align-items:center;gap:8px;}
     .topbar h1{font-size:17px;}
     .topbar .sub{min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:9px;}
-    .topbar-tabs{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:6px;}
-    .tab-btn{width:100%;padding:9px 8px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;font-size:10px;line-height:1;border-bottom-color:var(--border);}
+    .topbar-tabs{width:100%;min-width:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;}
+    .tab-btn{width:100%;min-width:0;padding:9px 8px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;font-size:10px;line-height:1;border-bottom-color:var(--border);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
     .tab-btn.active{background:var(--ink);border-color:var(--ink);color:#fff;}
-    .topbar-right{width:100%;justify-content:flex-start;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;}
+    .topbar-right{width:100%;min-width:0;justify-content:flex-start;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;}
     .topbar-right::-webkit-scrollbar{display:none;}
     .topbar-right .btn{flex:0 0 auto;}
     .auth-user{display:none;}
 
-    .workspace{position:relative;overflow:hidden;}
+    .workspace{width:100%;max-width:100%;position:relative;overflow:hidden;}
     .canvas-wrapper{width:100%;height:100%;align-items:flex-start;justify-content:flex-start;padding:18px 16px 24px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
     .create-canvas{align-items:flex-start;justify-content:flex-start;}
     .page-frame{margin-left:auto;margin-right:auto;}
@@ -204,8 +205,8 @@
     .mobile-panel-scrim{display:block;position:absolute;inset:0;z-index:8;background:rgba(23,22,20,.32);opacity:0;pointer-events:none;transition:opacity 160ms ease;}
     #appShell.mobile-panel-open .workspace.mobile-active-view .mobile-panel-scrim{opacity:1;pointer-events:auto;}
 
-    .mobile-toolbar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;flex:0 0 calc(58px + env(safe-area-inset-bottom));height:calc(58px + env(safe-area-inset-bottom));padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:var(--bg-panel);border-top:1px solid var(--border);position:relative;z-index:13;}
-    .mobile-tool-btn{min-width:0;border:1px solid var(--border-strong);border-radius:var(--radius);background:transparent;color:var(--ink);font:10px var(--font-sans);text-transform:uppercase;letter-spacing:.07em;cursor:pointer;}
+    .mobile-toolbar{width:100%;max-width:100%;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;flex:0 0 calc(58px + env(safe-area-inset-bottom));height:calc(58px + env(safe-area-inset-bottom));padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:var(--bg-panel);border-top:1px solid var(--border);position:relative;z-index:13;overflow:hidden;}
+    .mobile-tool-btn{min-width:0;border:1px solid var(--border-strong);border-radius:var(--radius);background:transparent;color:var(--ink);font:10px var(--font-sans);text-transform:uppercase;letter-spacing:.07em;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
     .mobile-tool-btn.active{background:var(--ink);color:#fff;}
 
     .section{margin-bottom:28px;}

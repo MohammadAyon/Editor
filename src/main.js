@@ -102,7 +102,9 @@ function setMobilePanel(panel){
 
 export function openMobilePanel(panel){
   if(!isMobileLayout()) return;
-  setMobilePanel(panel);
+  const shell = document.getElementById('appShell');
+  const current = shell ? shell.dataset.mobilePanel || '' : '';
+  setMobilePanel(current === panel ? '' : panel);
 }
 
 export function closeMobilePanel(){
