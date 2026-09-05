@@ -134,6 +134,7 @@ export function renderInspector(){
             <option value="sans" ${el.fontFamily==='sans' ? 'selected' : ''}>Sans (Inter)</option>
             <option value="display" ${el.fontFamily==='display' ? 'selected' : ''}>Serif (Fraunces)</option>
             <option value="mono" ${el.fontFamily==='mono' ? 'selected' : ''}>Mono (IBM Plex Mono)</option>
+            <option value="gothic" ${el.fontFamily==='gothic'||el.fontFamily==='century-gothic' ? 'selected' : ''}>Century Gothic</option>
           </select>
         </div>
         <div class="field"><label>Letter spacing (em)</label><input type="number" step="0.01" min="-0.1" max="0.5" value="${Number.isFinite(el.letterSpacing) ? el.letterSpacing : 0}" oninput="updateProp('${el.id}','letterSpacing',parseFloat(this.value))"></div>

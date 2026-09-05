@@ -157,7 +157,7 @@ export function makeKonvaNode(el){
   const visualHeight = height;
   let node;
   if(el.type === 'text'){
-    const familyMap = { sans:'Inter', display:'Fraunces', mono:'IBM Plex Mono' };
+    const familyMap = { sans:'Inter', display:'Fraunces', mono:'IBM Plex Mono', gothic:'Century Gothic', 'century-gothic':'Century Gothic' };
     const fontFamily = familyMap[el.fontFamily] || (el.variant === 'display' ? 'Fraunces' : 'Inter');
     const fontStyle = [el.italic ? 'italic' : '', el.weight >= 600 ? 'bold' : ''].filter(Boolean).join(' ') || 'normal';
     const fill = el.color || (el.variant === 'label' ? '#7A776E' : '#171614');
@@ -525,7 +525,7 @@ export function triggerImageUpload(id){
   hiddenImageInput.click();
 }
 
-if(location.hostname === 'localhost' || location.hostname === '127.0.0.1'){
+if(typeof location !== 'undefined' && (location.hostname === 'localhost' || location.hostname === '127.0.0.1')){
   window.getEditorDiagnostics = () => ({
     stageNodes: konvaStage ? Array.from(konvaStage.getChildren()).reduce((count, layer) => count + 1 + layer.getChildren().length, 0) : 0,
     layerCount: konvaStage ? konvaStage.getLayers().length : 0,

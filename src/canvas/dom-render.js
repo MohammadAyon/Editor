@@ -12,7 +12,7 @@ export function lineWidth(el){ return Number.isFinite(el.strokeWidth) ? el.strok
 // Builds the CSS text for optional typography overrides on a text element.
 // Anything left unset here falls back to the variant's CSS class default.
 function textTypographyCSS(el){
-  const familyVar = el.fontFamily === 'sans' ? 'var(--font-sans)' : el.fontFamily === 'display' ? 'var(--font-display)' : el.fontFamily === 'mono' ? 'var(--font-mono)' : '';
+  const familyVar = el.fontFamily === 'sans' ? 'var(--font-sans)' : el.fontFamily === 'display' ? 'var(--font-display)' : el.fontFamily === 'mono' ? 'var(--font-mono)' : (el.fontFamily === 'gothic' || el.fontFamily === 'century-gothic') ? 'var(--font-gothic)' : '';
   let css = '';
   if(familyVar) css += `font-family:${familyVar};`;
   if(el.italic) css += `font-style:italic;`;
@@ -145,7 +145,7 @@ export function applyElementStyle(id){
     node.style.fontSize = el.fontSize + 'px';
     node.style.fontWeight = el.weight;
     node.style.textAlign = el.align;
-    node.style.fontFamily = el.fontFamily === 'sans' ? 'var(--font-sans)' : el.fontFamily === 'display' ? 'var(--font-display)' : el.fontFamily === 'mono' ? 'var(--font-mono)' : '';
+    node.style.fontFamily = el.fontFamily === 'sans' ? 'var(--font-sans)' : el.fontFamily === 'display' ? 'var(--font-display)' : el.fontFamily === 'mono' ? 'var(--font-mono)' : (el.fontFamily === 'gothic' || el.fontFamily === 'century-gothic') ? 'var(--font-gothic)' : '';
     node.style.fontStyle = el.italic ? 'italic' : '';
     node.style.textDecoration = el.underline ? 'underline' : '';
     node.style.letterSpacing = Number.isFinite(el.letterSpacing) ? el.letterSpacing + 'em' : '';
