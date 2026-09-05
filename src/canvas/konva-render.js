@@ -24,9 +24,12 @@ export function updateKonvaNodePosition(id){
   if(!konvaLayer) return;
   const el = getEl(id);
   const node = el && konvaLayer.findOne('#' + id);
-  if(!el || !node) return;
+  const width = mmToPx(el.width);
   node.x(mmToPx(el.x + el.width / 2));
   node.y(mmToPx(el.y + heightOf(el) / 2));
+  if(el.type === 'line' && typeof node.points === 'function'){
+    node.points([-width / 2, 0, width / 2, 0]);
+  }
 }
 
 export function updateSelectionOverlayPosition(id){
@@ -68,7 +71,38 @@ export function getStagePointer(nativeEvent){
 
 export function resizeSnapBox(oldBox, newBox, selectedElement){
   const minWidth = mmToPx(5);
-  const minHeight = selectedElement && selectedElement.type === 'line' ? mmToPx(2) : mmToPx(5);
+  if(selectedElement && selectedElement.type === 'line'){
+    if(newBox.width < minWidth) return oldBox;
+    const rotation = Math.abs(Number(selectedElement.rotation) || 0) % 180;
+    if(rotation > 0.1 && rotation < 179.9) return newBox;
+
+    const threshold = mmToPx(1.5);
+    const selectedId = selectedElement.id;
+    const xCandidates = [0, state.page.width].map(mmToPx);
+    state.elements.forEach(element => {
+      if(element.id === selectedId) return;
+      xCandidates.push(mmToPx(element.x), mmToPx(element.x + element.width));
+    });
+
+    const result = { ...newBox };
+    const leftAnchored = Math.abs(newBox.x - oldBox.x) > 0.5;
+    const right = newBox.x + newBox.width;
+    const nearest = (value, candidates) => {
+      let match = null;
+      candidates.forEach(candidate => {
+        if(Math.abs(value - candidate) <= threshold && (!match || Math.abs(value - candidate) < Math.abs(value - match))) match = candidate;
+      });
+      return match;
+    };
+    const leftSnap = leftAnchored ? nearest(newBox.x, xCandidates) : null;
+    const rightSnap = leftAnchored ? null : nearest(right, xCandidates);
+    if(leftSnap != null){ result.width += result.x - leftSnap; result.x = leftSnap; }
+    if(rightSnap != null) result.width = rightSnap - result.x;
+    if(result.width < minWidth) return oldBox;
+    return result;
+  }
+
+  const minHeight = mmToPx(5);
   if(newBox.width < minWidth || newBox.height < minHeight) return oldBox;
 
   const rotation = Math.abs(Number(selectedElement && selectedElement.rotation) || 0) % 180;
@@ -157,6 +191,12 @@ export function makeKonvaNode(el){
       lineJoin: el.lineJoin || 'miter',
       listening: true
     });
+    node.getSelfRect = function(){
+      const pts = this.points();
+      const w = Math.abs((pts[2] || 0) - (pts[0] || 0)) || width;
+      const h = Math.max(this.strokeWidth(), 6);
+      return { x: -w / 2, y: -h / 2, width: w, height: h };
+    };
   } else if(el.type === 'rect'){
     node = new Konva.Rect({
       x: x + width / 2,
@@ -425,7 +465,13 @@ export function renderKonva(){
   const selected = [...state.selectedIds].map(id => konvaLayer.findOne('#' + id)).filter(Boolean);
   if(selected.length === 1){
     const selectedElement = getEl(selected[0].id());
-    transformer.keepRatio(selectedElement.type === 'image' ? selectedElement.keepRatio !== false : selectedElement.keepRatio === true);
+    if(selectedElement.type === 'line'){
+      transformer.enabledAnchors(['middle-left', 'middle-right']);
+      transformer.keepRatio(false);
+    } else {
+      transformer.enabledAnchors(['top-left', 'top-right', 'bottom-left', 'bottom-right']);
+      transformer.keepRatio(selectedElement.type === 'image' ? selectedElement.keepRatio !== false : selectedElement.keepRatio === true);
+    }
     transformer.nodes(selected);
     transformer.on('transformstart', pushUndo);
     transformer.on('transformend', () => {
@@ -437,8 +483,10 @@ export function renderKonva(){
       if(el.type !== 'line') el.height = round1(clamp(el.height * absScaleY, 5, state.page.height));
       el.rotation = round1(node.rotation());
       if(el.type === 'line'){
-        el.x = round1(node.x() / getPxPerMm() - el.width / 2);
-        el.y = round1(node.y() / getPxPerMm());
+        const nx = Number.isFinite(node.x()) ? node.x() : mmToPx(el.x + el.width / 2);
+        const ny = Number.isFinite(node.y()) ? node.y() : mmToPx(el.y);
+        el.x = round1(nx / getPxPerMm() - el.width / 2);
+        el.y = round1(ny / getPxPerMm());
         clampElementPosition(el);
       } else {
         el.x = round1(clamp(node.x() / getPxPerMm() - el.width / 2, 0, state.page.width - el.width));

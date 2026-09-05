@@ -1,5 +1,5 @@
 // src/canvas/dom-render.js — DOM element rendering, HTML generation, and style sync
-import { state, getEl, round1, clamp, heightOf, escapeHtml, sanitizeImageSrc, brandImages, konvaLayer, konvaStage, setKonvaStage, setKonvaLayer, setKonvaGuideLayer, setKonvaTransformer } from '../state/state.js';
+import { state, getEl, round1, clamp, heightOf, escapeHtml, sanitizeImageSrc, brandImages, konvaLayer, konvaTransformer, konvaStage, setKonvaStage, setKonvaLayer, setKonvaGuideLayer, setKonvaTransformer } from '../state/state.js';
 import { getPxPerMm, syncZoomLayout } from './zoom.js';
 import { mmToPx } from './snapping.js';
 import { renderKonva, cancelInteraction, updateKonvaNodePosition } from './konva-render.js';
@@ -170,6 +170,7 @@ export function applyElementStyle(id){
   }
   if(el.type === 'line'){
     updateKonvaNodePosition(id);
+    if(konvaTransformer && state.selectedIds.has(id)) konvaTransformer.update();
     if(konvaLayer) konvaLayer.batchDraw();
   } else {
     renderKonva();

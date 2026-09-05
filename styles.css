@@ -174,12 +174,10 @@
   @media (max-width:860px){
     html,body{width:100%;max-width:100%;overflow:hidden;}
     #appShell{width:100%;max-width:100%;}
-
     .auth-panel{width:min(360px,calc(100% - 28px));padding:26px;}
 
     .topbar{width:100%;max-width:100%;height:auto;min-height:0;flex:0 0 auto;display:grid;grid-template-columns:minmax(0,1fr);gap:8px;align-items:stretch;padding:10px 12px;background:var(--bg-panel);position:relative;z-index:12;overflow:hidden;}
     .topbar-left{width:100%;min-width:0;justify-content:space-between;align-items:center;gap:8px;}
-    .topbar h1{font-size:17px;}
     .topbar .sub{min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:9px;}
     .topbar-tabs{width:100%;min-width:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;}
     .tab-btn{width:100%;min-width:0;padding:9px 8px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;font-size:10px;line-height:1;border-bottom-color:var(--border);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -192,7 +190,6 @@
     .workspace{width:100%;max-width:100%;position:relative;overflow:hidden;}
     .canvas-wrapper{width:100%;height:100%;align-items:flex-start;justify-content:flex-start;padding:18px 16px 24px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
     .create-canvas{align-items:flex-start;justify-content:flex-start;}
-    .page-frame{margin-left:auto;margin-right:auto;}
     .ruler-corner,.ruler-top,.ruler-left{display:none;}
     #page{left:0;top:0;}
 
@@ -209,7 +206,6 @@
     .mobile-tool-btn{min-width:0;border:1px solid var(--border-strong);border-radius:var(--radius);background:transparent;color:var(--ink);font:10px var(--font-sans);text-transform:uppercase;letter-spacing:.07em;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
     .mobile-tool-btn.active{background:var(--ink);color:#fff;}
 
-    .section{margin-bottom:28px;}
     .btn{min-height:36px;}
     .btn.tiny{min-height:28px;}
     .field input[type=text],.field textarea,select,.insp-row input[type=number]{min-height:36px;}
