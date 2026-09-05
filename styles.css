@@ -58,6 +58,24 @@
   .btn:disabled:hover{background:transparent;color:var(--ink);}
   .btn.primary:disabled:hover{background:var(--ink);color:#fff;}
   .btn.full{width:100%;}
+
+  /* --- loading spinner on buttons --- */
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .btn-spinner{
+    display:none;
+    width:13px; height:13px;
+    border:2px solid rgba(255,255,255,.4);
+    border-top-color:#fff;
+    border-radius:50%;
+    animation:spin .7s linear infinite;
+    flex-shrink:0;
+  }
+  .btn--loading,
+  .btn--loading:disabled{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    pointer-events:none; opacity:.8; cursor:default;
+  }
+  .btn--loading .btn-spinner{ display:inline-block; }
   .btn.tiny{padding:2px 7px;font-size:9px;}
 
   /* ---------- workspace ---------- */

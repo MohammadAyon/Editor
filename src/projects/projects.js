@@ -202,20 +202,35 @@ function waitForImages(container){
   ));
 }
 
+function setGenerating(loading){
+  const btn = document.getElementById('generateCoverBtn');
+  const label = document.getElementById('generateBtnLabel');
+  if(!btn) return;
+  btn.classList.toggle('btn--loading', loading);
+  btn.disabled = loading;
+  if(label) label.textContent = loading ? 'Generating…' : 'Generate cover';
+}
+
 export async function generateCover(){
   const preset = getSelectedPreset();
   if(!preset) return;
-  const project = await recordProject(preset);
-  const pageEl = document.getElementById('projectPage');
-  // Use the signed URL from Supabase if available, otherwise fall back to the
-  // current-session object URL so the photo always appears in the print output.
-  const printImage = project.projectImage || createData.projectImage || null;
-  const data = { projectName: project.projectName, location: project.location, clientName: project.clientName, projectImage: printImage };
-  const elements = preset.elements;
-  await resolvePrintImages(elements);
-  pageEl.innerHTML = elements.map(el => elementHTML(el, data, { forPrint: true })).join('');
-  scalePreviewTo(pageEl, preset.page.width, preset.page.height);
-  updatePrintStyle(preset.page.width, preset.page.height);
-  await waitForImages(pageEl);
-  window.print();
+  setGenerating(true);
+  await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 30)));
+  try{
+    const project = await recordProject(preset);
+    const pageEl = document.getElementById('projectPage');
+    // Use the signed URL from Supabase if available, otherwise fall back to the
+    // current-session object URL so the photo always appears in the print output.
+    const printImage = project.projectImage || createData.projectImage || null;
+    const data = { projectName: project.projectName, location: project.location, clientName: project.clientName, projectImage: printImage };
+    const elements = preset.elements;
+    await resolvePrintImages(elements);
+    pageEl.innerHTML = elements.map(el => elementHTML(el, data, { forPrint: true })).join('');
+    scalePreviewTo(pageEl, preset.page.width, preset.page.height);
+    updatePrintStyle(preset.page.width, preset.page.height);
+    await waitForImages(pageEl);
+    window.print();
+  } finally {
+    setGenerating(false);
+  }
 }

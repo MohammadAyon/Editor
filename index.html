@@ -211,7 +211,10 @@
         </div>
 
         <div class="section">
-          <button class="btn primary full" onclick="generateCover()">Generate cover</button>
+          <button class="btn primary full" id="generateCoverBtn" onclick="generateCover()">
+            <span class="btn-spinner" id="generateSpinner" aria-hidden="true"></span>
+            <span id="generateBtnLabel">Generate cover</span>
+          </button>
           <p class="hint" style="margin-top:12px">Saves this as a project linked to the preset used, then opens the
             print dialog at its exact page size.</p>
         </div>
