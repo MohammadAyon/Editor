@@ -24,15 +24,28 @@ function textTypographyCSS(el){
   return css;
 }
 
-export function resolveImageSrc(el, dataSource){
+export function resolveImageSrc(el, dataSource, options){
+  const forPrint = options && options.forPrint;
   if(el.role === 'logo'){
     const brand = brandImages.find(b => b.id === el.logoRef);
     return brand ? sanitizeImageSrc(brand.dataUrl) : null;
   }
-  return sanitizeImageSrc(el.field ? ((dataSource || state.data)[el.field] || el.src) : el.src);
+  const src = el.field ? ((dataSource || state.data)[el.field] || el.src) : el.src;
+  if(forPrint && el.printSrc) return sanitizeImageSrc(el.printSrc);
+  return sanitizeImageSrc(src);
 }
 
-export function elementHTML(el, dataSource){
+export async function resolvePrintImages(elements){
+  const { signedCoverImageUrl } = await import('../data/supabase-client.js');
+  await Promise.all(
+    elements.filter(el => el.type === 'image' && el.originalPath).map(async el => {
+      try{ el.printSrc = await signedCoverImageUrl(el.originalPath); }
+      catch(err){ console.warn('Could not resolve print image for', el.id, err); }
+    })
+  );
+}
+
+export function elementHTML(el, dataSource, options){
   dataSource = dataSource || state.data;
   const flip = `scale(${el.flipX ? -1 : 1},${el.flipY ? -1 : 1})`;
   const style = `left:${el.x}mm;top:${el.y}mm;width:${el.width}mm;` + (el.type !== 'line' ? `height:${el.height}mm;` : '') + `opacity:${Number.isFinite(el.opacity) ? el.opacity : 1};transform:rotate(${Number(el.rotation) || 0}deg) ${flip};transform-origin:center;`;
@@ -43,7 +56,7 @@ export function elementHTML(el, dataSource){
     return `<div class="element el-text ${variantClass}" data-id="${el.id}" style="${style}font-size:${el.fontSize}px;font-weight:${el.weight};text-align:${el.align};${textTypographyCSS(el)}">${escapeHtml(text)}</div>`;
   }
   if(el.type === 'image'){
-    const src = resolveImageSrc(el, dataSource);
+    const src = resolveImageSrc(el, dataSource, options);
     if(src) return `<div class="element el-image" data-id="${escapeHtml(el.id)}" data-role="${escapeHtml(el.role||'photo')}" style="${style}"><img src="${escapeHtml(src)}" draggable="false"></div>`;
     const label = el.role === 'logo' ? 'Pick a logo in the inspector' : 'Click to add image';
     return `<div class="element el-image el-image-empty" data-id="${el.id}" data-role="${el.role||'photo'}" style="${style}"><span class="no-print">${label}</span></div>`;

@@ -40,7 +40,10 @@ export function normalizeImportedElement(raw){
     element.weight = [400,500,600].includes(Number(raw.weight)) ? Number(raw.weight) : 400;
     element.align = ['left','center','right'].includes(raw.align) ? raw.align : 'left';
   }
-  if(raw.type === 'image') element.src = sanitizeImageSrc(raw.src);
+  if(raw.type === 'image'){
+    element.src = sanitizeImageSrc(raw.src);
+    element.originalPath = raw.originalPath || null;
+  }
   return element;
 }
 

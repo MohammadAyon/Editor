@@ -26,7 +26,7 @@ import {
 } from './inspector/inspector.js';
 import {
   saveCurrentAsPreset, loadPresetForEditing, updateLoadedPreset, deletePreset,
-  renderSavedPresetsList, refreshPresetSelect, getSelectedPreset, renderPresetSaveState, seedDefaultPreset
+  renderSavedPresetsList, refreshPresetSelect, getSelectedPreset, renderPresetSaveState, seedDefaultPreset, hydratePresetElements
 } from './presets/presets.js';
 import {
   recordProject, renderProjectsList, reprintProject, deleteProject, generateCover,
@@ -278,7 +278,7 @@ export async function initFromDatabase(runId){
   finishDataInit();
 }
 
-export function finishDataInit(){
+export async function finishDataInit(){
   renderSavedPresetsList();
   renderBrandList();
   renderProjectsList();
@@ -286,6 +286,9 @@ export function finishDataInit(){
   renderCreatePreview();
   render();
   switchTab('create');
+  // Hydrate any image elements whose proxy src was stripped before storage
+  await hydratePresetElements(state.elements);
+  if(state.elements.some(el => el.type === 'image' && el.src)) render();
 }
 
 // Attach all functions to window for index.html inline attributes & templates

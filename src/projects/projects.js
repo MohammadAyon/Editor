@@ -3,7 +3,7 @@ import { state, projects, setProjects, createData, createZoom, setCreateZoom as 
 import { db, uploadCoverImage, signedCoverImageUrl, deleteCoverImage, currentUserId } from '../data/supabase-client.js';
 import { saveToStorage, LS_KEYS } from '../data/storage.js';
 import { getSelectedPreset } from '../presets/presets.js';
-import { elementHTML } from '../canvas/dom-render.js';
+import { elementHTML, resolvePrintImages } from '../canvas/dom-render.js';
 import { updatePrintStyle } from '../page-config.js';
 
 export function onCreateFieldInput(field, value){
@@ -19,13 +19,11 @@ export function triggerCreatePhotoUpload(){
 export function onCreatePhotoSelected(file){
   if(!file) return;
   createData.projectImageFile = file;
-  const reader = new FileReader();
-  reader.onload = () => {
-    createData.projectImage = reader.result;
-    updateDropzonePreview();
-    renderCreatePreview();
-  };
-  reader.readAsDataURL(file);
+  if(createData.projectImagePreviewUrl) URL.revokeObjectURL(createData.projectImagePreviewUrl);
+  createData.projectImagePreviewUrl = URL.createObjectURL(file);
+  createData.projectImage = createData.projectImagePreviewUrl;
+  updateDropzonePreview();
+  renderCreatePreview();
 }
 
 export function updateDropzonePreview(){
@@ -109,7 +107,7 @@ export async function recordProject(preset){
     projectName: createData.projectName,
     location: createData.location,
     clientName: createData.clientName,
-    projectImage: createData.projectImage,
+    projectImage: null,
     presetId: preset.id,
     presetName: preset.name,
     presetSnapshot: { page: JSON.parse(JSON.stringify(preset.page)), elements: JSON.parse(JSON.stringify(preset.elements)) },
@@ -165,14 +163,17 @@ export function renderProjectsList(){
     </div>`).join('');
 }
 
-export function reprintProject(id){
+export async function reprintProject(id){
   const p = projects.find(pr => pr.id === id);
   if(!p) return;
   const pageEl = document.getElementById('projectPage');
   const data = { projectName: p.projectName, location: p.location, clientName: p.clientName, projectImage: p.projectImage };
-  pageEl.innerHTML = p.presetSnapshot.elements.map(el => elementHTML(el, data)).join('');
+  const elements = p.presetSnapshot.elements;
+  await resolvePrintImages(elements);
+  pageEl.innerHTML = elements.map(el => elementHTML(el, data, { forPrint: true })).join('');
   scalePreviewTo(pageEl, p.presetSnapshot.page.width, p.presetSnapshot.page.height);
   updatePrintStyle(p.presetSnapshot.page.width, p.presetSnapshot.page.height);
+  await waitForImages(pageEl);
   window.print();
 }
 
@@ -190,10 +191,28 @@ export async function deleteProject(id){
   renderProjectsList();
 }
 
+function waitForImages(container){
+  const imgs = [...container.querySelectorAll('img')];
+  if(!imgs.length) return Promise.resolve();
+  return Promise.all(imgs.map(img =>
+    img.complete ? Promise.resolve() : new Promise(resolve => {
+      img.addEventListener('load', resolve, { once: true });
+      img.addEventListener('error', resolve, { once: true });
+    })
+  ));
+}
+
 export async function generateCover(){
   const preset = getSelectedPreset();
   if(!preset) return;
-  await recordProject(preset);
+  const project = await recordProject(preset);
+  const pageEl = document.getElementById('projectPage');
+  const data = { projectName: project.projectName, location: project.location, clientName: project.clientName, projectImage: project.projectImage };
+  const elements = preset.elements;
+  await resolvePrintImages(elements);
+  pageEl.innerHTML = elements.map(el => elementHTML(el, data, { forPrint: true })).join('');
+  scalePreviewTo(pageEl, preset.page.width, preset.page.height);
   updatePrintStyle(preset.page.width, preset.page.height);
+  await waitForImages(pageEl);
   window.print();
 }

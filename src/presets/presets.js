@@ -1,8 +1,30 @@
 // src/presets/presets.js — Preset file save, load, update, delete, and list management
 import { state, presets, setPresets, editingPresetId, setEditingPresetId, newId, advanceIdCounter, undoStack, redoStack, escapeHtml } from '../state/state.js';
-import { db, presetToRow, presetFromRow } from '../data/supabase-client.js';
+import { db, presetToRow, presetFromRow, signedCoverImageUrl } from '../data/supabase-client.js';
 import { saveToStorage, LS_KEYS } from '../data/storage.js';
 import { syncPageConfig } from '../page-config.js';
+
+// Strip large proxy blobs from image elements that have a permanent Supabase path,
+// so they don't pollute localStorage or the DB preset snapshot.
+export function stripProxiesForPresetStorage(elements){
+  return elements.map(el => {
+    if(el.type !== 'image' || !el.originalPath) return el;
+    const stripped = { ...el };
+    delete stripped.src;
+    delete stripped.printSrc;
+    return stripped;
+  });
+}
+
+// Hydrate image elements that were stripped: fetch a fresh signed URL into el.src.
+export async function hydratePresetElements(elements){
+  await Promise.all(
+    elements.filter(el => el.type === 'image' && el.originalPath && !el.src).map(async el => {
+      try{ el.src = await signedCoverImageUrl(el.originalPath); }
+      catch(err){ console.warn('Could not hydrate image element', el.id, err); }
+    })
+  );
+}
 
 export function loadedPresetHasChanges(){
   const preset = presets.find(item => item.id === editingPresetId);
@@ -50,7 +72,7 @@ export async function saveCurrentAsPreset(){
     name,
     clientName: state.data.clientName,
     page: JSON.parse(JSON.stringify(state.page)),
-    elements: JSON.parse(JSON.stringify(state.elements))
+    elements: stripProxiesForPresetStorage(JSON.parse(JSON.stringify(state.elements)))
   };
   if(db){
     try{
@@ -73,7 +95,7 @@ export async function saveCurrentAsPreset(){
   alert(`Saved "${name}" — it's now selectable on the Create project tab.`);
 }
 
-export function loadPresetForEditing(id){
+export async function loadPresetForEditing(id){
   const preset = presets.find(item => item.id === id);
   if(!preset) return;
   setEditingPresetId(preset.id);
@@ -90,6 +112,8 @@ export function loadPresetForEditing(id){
   if(window.render) window.render();
   if(window.switchTab) window.switchTab('editor');
   renderSavedPresetsList();
+  await hydratePresetElements(state.elements);
+  if(window.render) window.render();
 }
 
 export async function updateLoadedPreset(){
@@ -99,7 +123,7 @@ export async function updateLoadedPreset(){
     ...preset,
     clientName: state.data.clientName,
     page: JSON.parse(JSON.stringify(state.page)),
-    elements: JSON.parse(JSON.stringify(state.elements))
+    elements: stripProxiesForPresetStorage(JSON.parse(JSON.stringify(state.elements)))
   };
   if(db){
     const { error } = await db.from('presets').update(presetToRow(updated)).eq('id', preset.id);

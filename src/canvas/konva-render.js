@@ -9,6 +9,8 @@ import {
 import { getPxPerMm } from './zoom.js';
 import { mmToPx, computeSnap, showGuideV, hideGuideV, showGuideH, hideGuideH } from './snapping.js';
 import { resolveImageSrc, rectFill, rectStroke, lineStroke, lineWidth, clampElementPosition } from './dom-render.js';
+import { db, uploadCoverImage } from '../data/supabase-client.js';
+import { resizeImageFile } from '../utils/image-resize.js';
 
 export function cancelInteraction(){
   if(interaction && interaction.boxEl) interaction.boxEl.remove();
@@ -512,14 +514,33 @@ export function triggerImageUpload(id){
     hiddenImageInput.style.display = 'none';
     document.body.appendChild(hiddenImageInput);
   }
-  hiddenImageInput.onchange = () => {
+  hiddenImageInput.onchange = async () => {
     const file = hiddenImageInput.files[0];
     if(!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if(window.updateProp) window.updateProp(id, 'src', reader.result);
-    };
-    reader.readAsDataURL(file);
+
+    // Fast, small proxy — this is what Konva renders/drags/resizes.
+    try{
+      const proxy = await resizeImageFile(file, 2000, 0.85);
+      if(window.updateProp) window.updateProp(id, 'src', proxy);
+    }catch(err){
+      console.warn('Could not resize image for proxy; falling back to original file reader', err);
+      const reader = new FileReader();
+      reader.onload = () => {
+        if(window.updateProp) window.updateProp(id, 'src', reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // Full-quality original, kept in Storage — this is what printing will use.
+    if(db){
+      try{
+        const path = await uploadCoverImage(file, 'elements');
+        if(window.updateProp) window.updateProp(id, 'originalPath', path);
+      }catch(err){
+        console.warn('Could not upload original image for print quality', err);
+      }
+    }
+
     hiddenImageInput.value = '';
   };
   hiddenImageInput.click();

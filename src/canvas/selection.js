@@ -30,7 +30,7 @@ export function addElement(type){
   pushUndo();
   let el;
   if(type === 'text') el = { id: newId('el'), type: 'text', field: null, content: 'New text', x: 20, y: 20, width: 60, height: 10, fontSize: 12, weight: 400, align: 'left', variant: 'body' };
-  if(type === 'image') el = { id: newId('el'), type: 'image', role: 'photo', field: null, x: 20, y: 20, width: 60, height: 60, src: null };
+  if(type === 'image') el = { id: newId('el'), type: 'image', role: 'photo', field: null, x: 20, y: 20, width: 60, height: 60, src: null, originalPath: null };
   if(type === 'logo') el = { id: newId('el'), type: 'image', role: 'logo', logoRef: brandImages.length ? brandImages[0].id : null, x: 20, y: 20, width: 40, height: 40 };
   if(type === 'line') el = { id: newId('el'), type: 'line', x: 20, y: Math.min(260, state.page.height - 20), width: 100, height: 0, stroke: '#171614', strokeWidth: 1 };
   if(type === 'rect') el = { id: newId('el'), type: 'rect', x: 20, y: 20, width: 60, height: 40, fill: '#ffffff', stroke: '#171614' };
