@@ -36,9 +36,11 @@ export function resolveImageSrc(el, dataSource, options){
 }
 
 export async function resolvePrintImages(elements){
+  const toResolve = elements.filter(el => el.type === 'image' && el.originalPath);
+  if(!toResolve.length) return;                         // nothing to do — skip network call
   const { signedCoverImageUrl } = await import('../data/supabase-client.js');
   await Promise.all(
-    elements.filter(el => el.type === 'image' && el.originalPath).map(async el => {
+    toResolve.map(async el => {
       try{ el.printSrc = await signedCoverImageUrl(el.originalPath); }
       catch(err){ console.warn('Could not resolve print image for', el.id, err); }
     })

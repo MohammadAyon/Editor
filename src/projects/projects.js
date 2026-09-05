@@ -207,7 +207,10 @@ export async function generateCover(){
   if(!preset) return;
   const project = await recordProject(preset);
   const pageEl = document.getElementById('projectPage');
-  const data = { projectName: project.projectName, location: project.location, clientName: project.clientName, projectImage: project.projectImage };
+  // Use the signed URL from Supabase if available, otherwise fall back to the
+  // current-session object URL so the photo always appears in the print output.
+  const printImage = project.projectImage || createData.projectImage || null;
+  const data = { projectName: project.projectName, location: project.location, clientName: project.clientName, projectImage: printImage };
   const elements = preset.elements;
   await resolvePrintImages(elements);
   pageEl.innerHTML = elements.map(el => elementHTML(el, data, { forPrint: true })).join('');

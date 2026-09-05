@@ -11,7 +11,7 @@ export function updatePrintStyle(width, height){
   width = width || state.page.width; height = height || state.page.height;
   let tag = document.getElementById('dynamicPrintStyle');
   if(!tag){ tag = document.createElement('style'); tag.id = 'dynamicPrintStyle'; document.head.appendChild(tag); }
-  tag.textContent = `@page{ size:${width}mm ${height}mm; }`;
+  tag.textContent = `@page{ size:${width}mm ${height}mm; margin:0; }`;
 }
 
 export function updatePageSub(){
