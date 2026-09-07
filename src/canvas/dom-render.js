@@ -3,6 +3,7 @@ import { state, getEl, round1, clamp, heightOf, escapeHtml, sanitizeImageSrc, br
 import { getPxPerMm, syncZoomLayout } from './zoom.js';
 import { mmToPx } from './snapping.js';
 import { renderKonva, cancelInteraction, updateKonvaNodePosition } from './konva-render.js';
+import { getIconPath } from '../icons/icons.js';
 
 export function rectFill(el){ return el.fill || '#ffffff'; }
 export function rectStroke(el){ return el.stroke || '#171614'; }
@@ -65,6 +66,13 @@ export function elementHTML(el, dataSource, options){
   }
   if(el.type === 'line') return `<div class="element el-line" data-id="${el.id}" style="${style}border-top-color:${lineStroke(el)};border-top-width:${lineWidth(el)}px;"></div>`;
   if(el.type === 'rect') return `<div class="element el-rect" data-id="${el.id}" style="${style}"><svg aria-hidden="true" width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none"><rect x="0" y="0" width="100" height="100" fill="${escapeHtml(rectFill(el))}" stroke="${escapeHtml(rectStroke(el))}" stroke-width="${Number(el.strokeWidth) || 1}" vector-effect="non-scaling-stroke" stroke-linejoin="${el.lineJoin || 'miter'}"></rect></svg></div>`;
+  if(el.type === 'icon'){
+    const pathD = getIconPath(el.icon);
+    const fill = el.filled ? (el.color || '#171614') : 'none';
+    const stroke = el.color || '#171614';
+    const strokeWidth = Number.isFinite(el.strokeWidth) ? el.strokeWidth : 2;
+    return `<div class="element el-icon" data-id="${escapeHtml(el.id)}" style="${style}"><svg aria-hidden="true" width="100%" height="100%" viewBox="0 0 24 24" preserveAspectRatio="none" fill="${escapeHtml(fill)}" stroke="${escapeHtml(stroke)}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round"><path d="${escapeHtml(pathD)}"></path></svg></div>`;
+  }
   return '';
 }
 
@@ -151,6 +159,16 @@ export function applyElementStyle(id){
     node.style.backgroundColor = rectFill(el);
     node.style.borderColor = rectStroke(el);
     node.style.borderWidth = (Number(el.strokeWidth) || 1) + 'px';
+  }
+  if(el.type === 'icon'){
+    const svg = node.querySelector('svg');
+    const path = node.querySelector('path');
+    if(svg && path){
+      path.setAttribute('d', getIconPath(el.icon));
+      svg.setAttribute('fill', el.filled ? (el.color || '#171614') : 'none');
+      svg.setAttribute('stroke', el.color || '#171614');
+      svg.setAttribute('stroke-width', Number.isFinite(el.strokeWidth) ? el.strokeWidth : 2);
+    }
   }
   if(el.type === 'line'){
     node.style.borderTopColor = lineStroke(el);

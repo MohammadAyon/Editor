@@ -11,6 +11,7 @@ import { mmToPx, computeSnap, showGuideV, hideGuideV, showGuideH, hideGuideH } f
 import { resolveImageSrc, rectFill, rectStroke, lineStroke, lineWidth, clampElementPosition } from './dom-render.js';
 import { db, uploadCoverImage } from '../data/supabase-client.js';
 import { resizeImageFile } from '../utils/image-resize.js';
+import { getIconPath } from '../icons/icons.js';
 
 export function cancelInteraction(){
   if(interaction && interaction.boxEl) interaction.boxEl.remove();
@@ -213,6 +214,41 @@ export function makeKonvaNode(el){
       lineJoin: el.lineJoin || 'miter',
       listening: true
     });
+  } else if(el.type === 'icon'){
+    node = new Konva.Group({
+      x: x + width / 2,
+      y: y + visualHeight / 2,
+      offsetX: width / 2,
+      offsetY: visualHeight / 2,
+      width,
+      height,
+      listening: true
+    });
+    node.add(new Konva.Rect({
+      x: 0,
+      y: 0,
+      width,
+      height,
+      fill: 'rgba(0,0,0,0.001)',
+      listening: true
+    }));
+    const pathD = getIconPath(el.icon);
+    const fill = el.filled ? (el.color || '#171614') : 'transparent';
+    const stroke = el.color || '#171614';
+    const strokeWidth = Number.isFinite(el.strokeWidth) ? el.strokeWidth : 2;
+    node.add(new Konva.Path({
+      x: 0,
+      y: 0,
+      data: pathD,
+      scaleX: width / 24,
+      scaleY: height / 24,
+      fill,
+      stroke,
+      strokeWidth,
+      lineCap: 'round',
+      lineJoin: 'round',
+      listening: false
+    }));
   } else {
     node = new Konva.Group({
       x: x + width / 2,
@@ -471,8 +507,11 @@ export function renderKonva(){
       transformer.enabledAnchors(['middle-left', 'middle-right']);
       transformer.keepRatio(false);
     } else {
-      transformer.enabledAnchors(['top-left', 'top-right', 'bottom-left', 'bottom-right']);
-      transformer.keepRatio(selectedElement.type === 'image' ? selectedElement.keepRatio !== false : selectedElement.keepRatio === true);
+      transformer.keepRatio(
+        selectedElement.type === 'image' || selectedElement.type === 'icon'
+          ? selectedElement.keepRatio !== false
+          : selectedElement.keepRatio === true
+      );
     }
     transformer.nodes(selected);
     transformer.on('transformstart', pushUndo);

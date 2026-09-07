@@ -22,7 +22,8 @@ import {
 import { initCanvasEvents, onPageMouseDown } from './canvas/drag-resize.js';
 import {
   renderInspector, renderLayers, updateSchemaView, updateNum, updateProp,
-  onDataInput, applyImageAspectRatio, setImageRatioPreset, applyCustomImageRatio, selectLayer
+  onDataInput, applyImageAspectRatio, setImageRatioPreset, applyCustomImageRatio, selectLayer,
+  filterIconGrid
 } from './inspector/inspector.js';
 import {
   saveCurrentAsPreset, loadPresetForEditing, updateLoadedPreset, deletePreset,
@@ -311,7 +312,7 @@ Object.assign(window, {
   alignSelection, distributeSelection, flipSelection, rotateSelection, positionSelection,
   // Data input & inspector
   onDataInput, updateNum, updateProp, setImageRatioPreset, applyCustomImageRatio,
-  selectLayer, triggerImageUpload,
+  selectLayer, triggerImageUpload, filterIconGrid,
   // Brand assets
   triggerBrandUpload, onBrandFileSelected, deleteBrandImage, uploadBrandImage,
   // Presets

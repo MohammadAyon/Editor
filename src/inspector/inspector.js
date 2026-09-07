@@ -2,6 +2,7 @@
 import { state, getEl, round1, clamp, escapeHtml, brandImages, pushUndo, pushUndoDebounced } from '../state/state.js';
 import { rectFill, rectStroke, lineStroke, lineWidth, applyElementStyle, clampElementPosition, renderPage, updateBoundElementsContent } from '../canvas/dom-render.js';
 import { renderKonva } from '../canvas/konva-render.js';
+import { ICONS, getIconDef } from '../icons/icons.js';
 
 export function updateNum(id, prop, value){
   const el = getEl(id);
@@ -51,7 +52,7 @@ export function updateProp(id, prop, value){
   if(!el) return;
   pushUndoDebounced('prop:' + id + ':' + prop);
   el[prop] = value;
-  if(prop === 'src' || prop === 'variant' || prop === 'logoRef' || prop === 'fill' || prop === 'stroke' || prop === 'strokeWidth' || prop === 'field'){
+  if(prop === 'src' || prop === 'variant' || prop === 'logoRef' || prop === 'fill' || prop === 'stroke' || prop === 'strokeWidth' || prop === 'field' || prop === 'icon' || prop === 'color' || prop === 'filled'){
     renderPage();
     renderInspector();
   } else {
@@ -67,6 +68,18 @@ export function onDataInput(field, value){
   renderKonva();
   updateSchemaView();
   if(window.renderPresetSaveState) window.renderPresetSaveState();
+}
+
+export function filterIconGrid(query){
+  const q = String(query || '').toLowerCase().trim();
+  const items = document.querySelectorAll('.icon-item');
+  items.forEach(item => {
+    const id = item.getAttribute('data-icon') || '';
+    const label = item.getAttribute('data-label') || '';
+    const cat = item.getAttribute('data-category') || '';
+    const match = !q || id.includes(q) || label.toLowerCase().includes(q) || cat.toLowerCase().includes(q);
+    item.style.display = match ? 'flex' : 'none';
+  });
 }
 
 export function renderInspector(){
@@ -199,6 +212,35 @@ export function renderInspector(){
         if(el.src) html += `<button class="btn small" style="margin-top:6px" onclick="updateProp('${el.id}','src',null)">Remove editor preview image</button>`;
       }
     }
+    if(el.type === 'icon'){
+      html += `
+        <div class="field"><label>Choose icon (${ICONS.length})</label>
+          <div class="icon-picker-shell">
+            <input type="text" class="icon-search-input" placeholder="Search icons…" oninput="filterIconGrid(this.value)">
+            <div class="icon-grid" id="iconPickerGrid">
+              ${ICONS.map(ic => {
+                const isSelected = ic.id === el.icon;
+                return `<button type="button" class="icon-item ${isSelected ? 'active' : ''}" data-icon="${escapeHtml(ic.id)}" data-label="${escapeHtml(ic.label)}" data-category="${escapeHtml(ic.category)}" title="${escapeHtml(ic.label)}" onclick="updateProp('${el.id}','icon','${ic.id}')">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ic.path}"></path></svg>
+                </button>`;
+              }).join('')}
+            </div>
+          </div>
+          <div class="field" style="margin-top:8px">
+            <select onchange="updateProp('${el.id}','icon',this.value)">
+              ${ICONS.map(ic => `<option value="${ic.id}" ${ic.id === el.icon ? 'selected' : ''}>${escapeHtml(ic.label)} (${ic.category})</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="field color-field"><label>Color</label><input type="color" value="${el.color || '#171614'}" onchange="updateProp('${el.id}','color',this.value)"></div>
+        <div class="field">
+          <label class="check-row"><input type="checkbox" ${el.filled ? 'checked' : ''} onchange="updateProp('${el.id}','filled',this.checked)"> Fill shape</label>
+        </div>
+        <div class="field"><label>Stroke thickness (px)</label><input type="number" min="0.5" max="8" step="0.5" value="${Number.isFinite(el.strokeWidth) ? el.strokeWidth : 2}" oninput="updateProp('${el.id}','strokeWidth',parseFloat(this.value))"></div>
+        <div class="field">
+          <label class="check-row"><input type="checkbox" ${el.keepRatio !== false ? 'checked' : ''} onchange="updateProp('${el.id}','keepRatio',this.checked)"> Lock square ratio</label>
+        </div>`;
+    }
     if(el.type === 'rect'){
       html += `
         <div class="field color-field"><label>Fill</label><input type="color" value="${rectFill(el)}" onchange="updateProp('${el.id}','fill',this.value)"></div>
@@ -265,6 +307,10 @@ export function updateSchemaView(){
 export function layerLabel(el){
   if(el.type === 'text') return el.field ? `Text: ${el.field}` : `Text: ${el.content || 'Untitled'}`;
   if(el.type === 'image') return el.role === 'logo' ? 'Image: logo' : 'Image: photo';
+  if(el.type === 'icon'){
+    const def = getIconDef(el.icon);
+    return `Icon: ${def ? def.label : el.icon || 'Pin'}`;
+  }
   return el.type === 'line' ? 'Line' : 'Rectangle';
 }
 
