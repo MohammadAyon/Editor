@@ -214,6 +214,17 @@ export function makeKonvaNode(el){
       lineJoin: el.lineJoin || 'miter',
       listening: true
     });
+  } else if(el.type === 'circle'){
+    node = new Konva.Ellipse({
+      x: x + width / 2,
+      y: y + visualHeight / 2,
+      radiusX: width / 2,
+      radiusY: visualHeight / 2,
+      fill: rectFill(el),
+      stroke: rectStroke(el),
+      strokeWidth: Number(el.strokeWidth) || 1,
+      listening: true
+    });
   } else if(el.type === 'icon'){
     node = new Konva.Group({
       x: x + width / 2,
@@ -508,7 +519,7 @@ export function renderKonva(){
       transformer.keepRatio(false);
     } else {
       transformer.keepRatio(
-        selectedElement.type === 'image' || selectedElement.type === 'icon'
+          selectedElement.type === 'image' || selectedElement.type === 'icon' || selectedElement.type === 'circle'
           ? selectedElement.keepRatio !== false
           : selectedElement.keepRatio === true
       );

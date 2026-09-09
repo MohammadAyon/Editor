@@ -66,6 +66,7 @@ export function elementHTML(el, dataSource, options){
   }
   if(el.type === 'line') return `<div class="element el-line" data-id="${el.id}" style="${style}border-top-color:${lineStroke(el)};border-top-width:${lineWidth(el)}px;"></div>`;
   if(el.type === 'rect') return `<div class="element el-rect" data-id="${el.id}" style="${style}"><svg aria-hidden="true" width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none"><rect x="0" y="0" width="100" height="100" fill="${escapeHtml(rectFill(el))}" stroke="${escapeHtml(rectStroke(el))}" stroke-width="${Number(el.strokeWidth) || 1}" vector-effect="non-scaling-stroke" stroke-linejoin="${el.lineJoin || 'miter'}"></rect></svg></div>`;
+  if(el.type === 'circle') return `<div class="element el-circle" data-id="${el.id}" style="${style}"><svg aria-hidden="true" width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none"><ellipse cx="50" cy="50" rx="50" ry="50" fill="${escapeHtml(rectFill(el))}" stroke="${escapeHtml(rectStroke(el))}" stroke-width="${Number(el.strokeWidth) || 1}" vector-effect="non-scaling-stroke"></ellipse></svg></div>`;
   if(el.type === 'icon'){
     const pathD = getIconPath(el.icon);
     const fill = el.filled ? (el.color || '#171614') : 'none';
@@ -203,8 +204,10 @@ export function applyElementStyle(id){
   }
   if(el.type === 'line'){
     updateKonvaNodePosition(id);
-    if(konvaTransformer && state.selectedIds.has(id)) konvaTransformer.update();
-    if(konvaLayer) konvaLayer.batchDraw();
+    if(konvaLayer){
+      konvaLayer.find('Transformer').forEach(tr => tr.update());
+      konvaLayer.batchDraw();
+    }
   } else {
     renderKonva();
   }

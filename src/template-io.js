@@ -27,7 +27,7 @@ export function normalizeImportedPage(page){
 }
 
 export function normalizeImportedElement(raw){
-  if(!raw || !['text','image','line','rect','icon'].includes(raw.type)) return null;
+  if(!raw || !['text','image','line','rect','circle','icon'].includes(raw.type)) return null;
   const element = { ...raw, id: newId('el'), type: raw.type };
   element.x = clamp(Number(raw.x) || 0, 0, state.page.width);
   element.y = clamp(Number(raw.y) || 0, 0, state.page.height);

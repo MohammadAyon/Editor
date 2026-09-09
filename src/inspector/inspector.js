@@ -241,7 +241,7 @@ export function renderInspector(){
           <label class="check-row"><input type="checkbox" ${el.keepRatio !== false ? 'checked' : ''} onchange="updateProp('${el.id}','keepRatio',this.checked)"> Lock square ratio</label>
         </div>`;
     }
-    if(el.type === 'rect'){
+    if(el.type === 'rect' || el.type === 'circle'){
       html += `
         <div class="field color-field"><label>Fill</label><input type="color" value="${rectFill(el)}" onchange="updateProp('${el.id}','fill',this.value)"></div>
         <div class="field color-field"><label>Border</label><input type="color" value="${rectStroke(el)}" onchange="updateProp('${el.id}','stroke',this.value)"></div>
@@ -311,7 +311,9 @@ export function layerLabel(el){
     const def = getIconDef(el.icon);
     return `Icon: ${def ? def.label : el.icon || 'Pin'}`;
   }
-  return el.type === 'line' ? 'Line' : 'Rectangle';
+  if(el.type === 'line') return 'Line';
+  if(el.type === 'circle') return 'Circle';
+  return 'Rectangle';
 }
 
 export function selectLayer(id, additive){
