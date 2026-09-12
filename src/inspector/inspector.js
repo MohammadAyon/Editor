@@ -145,9 +145,11 @@ export function renderInspector(){
           <select onchange="updateProp('${el.id}','fontFamily',this.value || null)">
             <option value="" ${!el.fontFamily ? 'selected' : ''}>Match style default</option>
             <option value="sans" ${el.fontFamily==='sans' ? 'selected' : ''}>Sans (Inter)</option>
-            <option value="display" ${el.fontFamily==='display' ? 'selected' : ''}>Serif (Fraunces)</option>
+            <option value="display" ${el.fontFamily==='display' ? 'selected' : ''}>Editorial serif (Fraunces)</option>
+            <option value="serif-alt" ${el.fontFamily==='serif-alt' ? 'selected' : ''}>Classic serif (Cormorant Garamond)</option>
             <option value="mono" ${el.fontFamily==='mono' ? 'selected' : ''}>Mono (IBM Plex Mono)</option>
-            <option value="gothic" ${el.fontFamily==='gothic'||el.fontFamily==='century-gothic' ? 'selected' : ''}>Century Gothic</option>
+            <option value="gothic" ${el.fontFamily==='gothic'||el.fontFamily==='century-gothic' ? 'selected' : ''}>Gothic (Montserrat)</option>
+            <option value="script" ${el.fontFamily==='script' ? 'selected' : ''}>Script (Caveat)</option>
           </select>
         </div>
         <div class="field"><label>Letter spacing (em)</label><input type="number" step="0.01" min="-0.1" max="0.5" value="${Number.isFinite(el.letterSpacing) ? el.letterSpacing : 0}" oninput="updateProp('${el.id}','letterSpacing',parseFloat(this.value))"></div>
@@ -161,6 +163,7 @@ export function renderInspector(){
         <div class="field">
           <label class="check-row"><input type="checkbox" ${el.italic ? 'checked' : ''} onchange="updateProp('${el.id}','italic',this.checked)"> Italic</label>
           <label class="check-row" style="margin-top:6px"><input type="checkbox" ${el.underline ? 'checked' : ''} onchange="updateProp('${el.id}','underline',this.checked)"> Underline</label>
+          <label class="check-row" style="margin-top:6px"><input type="checkbox" ${el.autoHeight ? 'checked' : ''} onchange="updateProp('${el.id}','autoHeight',this.checked)"> Auto-fit height to wrapped text</label>
         </div>`;
       html += `
         <div class="field"><label>Data field</label>
@@ -180,6 +183,12 @@ export function renderInspector(){
     }
     if(el.type === 'image'){
       const imageRatio = el.width / Math.max(el.height, 0.1);
+      html += `<div class="field"><label>Data field</label>
+        <select onchange="updateProp('${el.id}','field',this.value || null)">
+          <option value="" ${!el.field ? 'selected' : ''}>Custom image</option>
+          <option value="projectImage" ${el.field==='projectImage' ? 'selected' : ''}>Project image</option>
+        </select>
+      </div>`;
       html += `<div class="field"><label>Aspect ratio</label>
         <label class="check-row"><input type="checkbox" ${el.keepRatio !== false ? 'checked' : ''} onchange="updateProp('${el.id}','keepRatio',this.checked)"> Lock image ratio</label>
         <select style="margin-top:8px" onchange="setImageRatioPreset('${el.id}',this.value)">
@@ -197,7 +206,16 @@ export function renderInspector(){
           <button class="btn tiny" type="button" onclick="applyCustomImageRatio('${el.id}')">Apply</button>
         </div>
         <p class="hint" style="margin:8px 0 0">Container size is in mm above. A ratio preserves the current width and adjusts its height.</p>
+      </div>
+      <div class="field">
+        <label class="check-row"><input type="checkbox" ${el.fade ? 'checked' : ''} onchange="updateProp('${el.id}','fade',this.checked); renderInspector();"> Linear opacity fade</label>
       </div>`;
+      if(el.fade){
+        html += `
+        <div class="field"><label>Fade direction (° — 0 top, 90 right, 180 bottom, 270 left)</label><input type="number" min="0" max="360" step="1" value="${Number.isFinite(el.fadeAngle) ? el.fadeAngle : 180}" oninput="updateProp('${el.id}','fadeAngle',parseFloat(this.value))"></div>
+        <div class="field"><label>Opacity at start</label><input type="range" min="0" max="1" step="0.05" value="${Number.isFinite(el.fadeFrom) ? el.fadeFrom : 1}" oninput="updateProp('${el.id}','fadeFrom',parseFloat(this.value))"></div>
+        <div class="field"><label>Opacity at end</label><input type="range" min="0" max="1" step="0.05" value="${Number.isFinite(el.fadeTo) ? el.fadeTo : 0}" oninput="updateProp('${el.id}','fadeTo',parseFloat(this.value))"></div>`;
+      }
       if(el.role === 'logo'){
         html += `<div class="field"><label>Logo</label>
           <select onchange="updateProp('${el.id}','logoRef',this.value)">
@@ -265,7 +283,10 @@ export function renderInspector(){
         <button class="btn small" onclick="sendSelectionBackward()">Backward</button>
         <button class="btn small" onclick="bringSelectionToFront()">Front</button>
         <button class="btn small" onclick="sendSelectionToBack()">Back</button>
+        <button class="btn small" onclick="copySelection()">Copy</button>
         <button class="btn small" onclick="duplicateSelection()">Duplicate</button>
+        <button class="btn small" onclick="pasteSelection()">Paste</button>
+        <button class="btn small" onclick="cutSelection()">Cut</button>
         <button class="btn small danger" onclick="deleteSelection()">Delete</button>
       </div>`;
     box.innerHTML = html;
@@ -293,7 +314,10 @@ export function renderInspector(){
     <div class="row-btns" style="margin-top:14px">
       <button class="btn small" onclick="bringSelectionToFront()">Front</button>
       <button class="btn small" onclick="sendSelectionToBack()">Back</button>
+      <button class="btn small" onclick="copySelection()">Copy</button>
       <button class="btn small" onclick="duplicateSelection()">Duplicate</button>
+      <button class="btn small" onclick="pasteSelection()">Paste</button>
+      <button class="btn small" onclick="cutSelection()">Cut</button>
       <button class="btn small danger" onclick="deleteSelection()">Delete</button>
     </div>`;
   box.innerHTML = html;

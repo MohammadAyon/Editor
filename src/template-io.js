@@ -22,7 +22,8 @@ export function normalizeImportedPage(page){
     size,
     orientation,
     width: orientation === 'landscape' ? base.h : base.w,
-    height: orientation === 'landscape' ? base.w : base.h
+    height: orientation === 'landscape' ? base.w : base.h,
+    fill: /^#[0-9a-f]{6}$/i.test(page.fill) ? page.fill : '#ffffff'
   };
 }
 
@@ -61,7 +62,8 @@ export function importTemplateFile(file){
       const obj = JSON.parse(reader.result);
       pushUndo();
       if(obj.page){
-        state.page = Object.assign({ size: 'A4', orientation: 'portrait' }, obj.page);
+        state.page = Object.assign({ size: 'A4', orientation: 'portrait', fill: '#ffffff' }, obj.page);
+        if(!/^#[0-9a-f]{6}$/i.test(state.page.fill)) state.page.fill = '#ffffff';
         let matched = false;
         for(const [size, base] of Object.entries(PAGE_SIZES)){
           if(state.page.width === base.w && state.page.height === base.h){

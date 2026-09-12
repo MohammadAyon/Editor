@@ -6,9 +6,9 @@ import {
 } from '../state/state.js';
 import { getPxPerMm } from './zoom.js';
 import { computeSnap, showGuideV, hideGuideV, showGuideH, hideGuideH } from './snapping.js';
-import { selectOnly, toggleSelect, clearSelection, selectAll, duplicateSelection, deleteSelection } from './selection.js';
+import { selectOnly, toggleSelect, clearSelection, selectAll, duplicateSelection, deleteSelection, copySelection, cutSelection, pasteSelection } from './selection.js';
 import { cancelInteraction, updateKonvaNodePosition, updateSelectionOverlayPosition, triggerImageUpload } from './konva-render.js';
-import { applyElementStyle, clampElementPosition, renderPage } from './dom-render.js';
+import { applyElementStyle, clampElementPosition, renderPage, fitTextHeightToContent } from './dom-render.js';
 
 export function onPageMouseDown(e){
   if(e.target.closest('.konva-editor-layer')) return;
@@ -223,7 +223,8 @@ export function initCanvasEvents(){
         el.content = textDiv.textContent;
         textDiv.contentEditable = 'false';
         textDiv.removeEventListener('blur', onBlur);
-        if(window.updateSchemaView) window.updateSchemaView();
+        if(el.autoHeight) fitTextHeightToContent(el, textDiv);
+        if(window.render) window.render(); else if(window.updateSchemaView) window.updateSchemaView();
       };
       textDiv.addEventListener('blur', onBlur);
     });
@@ -250,6 +251,21 @@ export function initCanvasEvents(){
     if(mod && !typing && (e.key === 'd' || e.key === 'D')){
       e.preventDefault();
       duplicateSelection();
+      return;
+    }
+    if(mod && !typing && (e.key === 'c' || e.key === 'C')){
+      e.preventDefault();
+      copySelection();
+      return;
+    }
+    if(mod && !typing && (e.key === 'x' || e.key === 'X')){
+      e.preventDefault();
+      cutSelection();
+      return;
+    }
+    if(mod && !typing && (e.key === 'v' || e.key === 'V')){
+      e.preventDefault();
+      pasteSelection();
       return;
     }
     if(mod && !typing && (e.key === 'a' || e.key === 'A')){

@@ -7,6 +7,24 @@ export function applyPageCSSVars(){
   document.documentElement.style.setProperty('--page-h', state.page.height + 'mm');
 }
 
+export function applyPageFill(){
+  const page = document.getElementById('page');
+  if(page) page.style.backgroundColor = state.page.fill || '#ffffff';
+  const input = document.getElementById('pageFillInput');
+  if(input) input.value = state.page.fill || '#ffffff';
+  const value = document.getElementById('pageFillValue');
+  if(value) value.textContent = state.page.fill || '#ffffff';
+}
+
+export function setPageFill(value){
+  if(!/^#[0-9a-f]{6}$/i.test(value)) return;
+  pushUndo();
+  state.page.fill = value;
+  applyPageFill();
+  if(window.renderCreatePreview) window.renderCreatePreview();
+  if(window.updateSchemaView) window.updateSchemaView();
+}
+
 export function updatePrintStyle(width, height){
   width = width || state.page.width; height = height || state.page.height;
   let tag = document.getElementById('dynamicPrintStyle');
@@ -28,23 +46,62 @@ export function syncPageSizeSelect(){
 export function buildRulerLabels(){
   const top = document.getElementById('rulerTop');
   const left = document.getElementById('rulerLeft');
+  const corner = document.querySelector('.ruler-corner');
   if(!top || !left) return;
   top.innerHTML = '';
   left.innerHTML = '';
-  for(let mm = 0; mm <= state.page.width; mm += 50){
-    const s = document.createElement('span');
-    s.className = 'ruler-label'; s.style.left = mm + 'mm'; s.style.top = '2px'; s.textContent = mm;
-    top.appendChild(s);
+  if(corner) corner.textContent = 'mm | cm | in';
+
+  const addMajorTick = (container, position, axis) => {
+    const tick = document.createElement('span');
+    tick.className = 'ruler-tick major';
+    if(axis === 'x') tick.style.left = position + 'mm';
+    else tick.style.top = position + 'mm';
+    container.appendChild(tick);
+
+    const label = document.createElement('span');
+    label.className = 'ruler-label';
+    if(axis === 'x'){
+      label.style.left = position + 'mm';
+      label.style.top = '2px';
+      const cm = position / 10;
+      const inch = position / 25.4;
+      const text = position % 50 === 0 ? `${position} mm` : (position % 10 === 0 ? `${cm} cm` : '');
+      label.textContent = text || (position % 25.4 < 0.5 ? `${inch.toFixed(1)} in` : '');
+    } else {
+      label.style.top = position + 'mm';
+      label.style.left = '2px';
+      const cm = position / 10;
+      const inch = position / 25.4;
+      const text = position % 50 === 0 ? `${position} mm` : (position % 10 === 0 ? `${cm} cm` : '');
+      label.textContent = text || (position % 25.4 < 0.5 ? `${inch.toFixed(1)} in` : '');
+    }
+    if(label.textContent) container.appendChild(label);
+  };
+
+  for(let mm = 0; mm <= state.page.width; mm += 1){
+    const tick = document.createElement('span');
+    tick.className = 'ruler-tick';
+    tick.style.left = mm + 'mm';
+    if(mm % 10 === 0) tick.classList.add('major');
+    else if(mm % 5 === 0) tick.classList.add('mid');
+    top.appendChild(tick);
+    if(mm % 10 === 0) addMajorTick(top, mm, 'x');
   }
-  for(let mm = 0; mm <= state.page.height; mm += 50){
-    const s = document.createElement('span');
-    s.className = 'ruler-label'; s.style.top = mm + 'mm'; s.style.left = '2px'; s.textContent = mm;
-    left.appendChild(s);
+  for(let mm = 0; mm <= state.page.height; mm += 1){
+    const tick = document.createElement('span');
+    tick.className = 'ruler-tick';
+    tick.style.top = mm + 'mm';
+    if(mm % 10 === 0) tick.classList.add('major');
+    else if(mm % 5 === 0) tick.classList.add('mid');
+    left.appendChild(tick);
+    if(mm % 10 === 0) addMajorTick(left, mm, 'y');
   }
 }
 
 export function syncPageConfig(){
   applyPageCSSVars();
+  applyPageFill();
   updatePrintStyle();
   updatePageSub();
   syncPageSizeSelect();

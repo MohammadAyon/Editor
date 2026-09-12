@@ -13,7 +13,16 @@ export function lineWidth(el){ return Number.isFinite(el.strokeWidth) ? el.strok
 // Builds the CSS text for optional typography overrides on a text element.
 // Anything left unset here falls back to the variant's CSS class default.
 function textTypographyCSS(el){
-  const familyVar = el.fontFamily === 'sans' ? 'var(--font-sans)' : el.fontFamily === 'display' ? 'var(--font-display)' : el.fontFamily === 'mono' ? 'var(--font-mono)' : (el.fontFamily === 'gothic' || el.fontFamily === 'century-gothic') ? 'var(--font-gothic)' : '';
+  const familyMap = {
+    sans: 'var(--font-sans)',
+    display: 'var(--font-display)',
+    'serif-alt': 'var(--font-serif-alt)',
+    mono: 'var(--font-mono)',
+    gothic: 'var(--font-gothic)',
+    'century-gothic': 'var(--font-gothic)',
+    script: 'var(--font-script)'
+  };
+  const familyVar = familyMap[el.fontFamily] || '';
   let css = '';
   if(familyVar) css += `font-family:${familyVar};`;
   if(el.italic) css += `font-style:italic;`;
@@ -23,6 +32,21 @@ function textTypographyCSS(el){
   if(el.textTransform && el.textTransform !== 'none') css += `text-transform:${el.textTransform};`;
   if(el.color) css += `color:${el.color};`;
   return css;
+}
+
+export function resolveImageFade(el){
+  if(!el || !el.fade) return null;
+  return {
+    angle: Number.isFinite(el.fadeAngle) ? el.fadeAngle : 180,
+    from: Number.isFinite(el.fadeFrom) ? el.fadeFrom : 1,
+    to: Number.isFinite(el.fadeTo) ? el.fadeTo : 0
+  };
+}
+
+export function imageFadeGradient(el){
+  const fade = resolveImageFade(el);
+  if(!fade) return '';
+  return `linear-gradient(${fade.angle}deg, rgba(0,0,0,${fade.from}) 0%, rgba(0,0,0,${fade.to}) 100%)`;
 }
 
 export function resolveImageSrc(el, dataSource, options){
@@ -60,9 +84,11 @@ export function elementHTML(el, dataSource, options){
   }
   if(el.type === 'image'){
     const src = resolveImageSrc(el, dataSource, options);
+    const gradient = imageFadeGradient(el);
+    const fadeStyle = gradient ? `mask-image:${gradient};-webkit-mask-image:${gradient};mask-mode:alpha;-webkit-mask-mode:alpha;` : '';
     if(src){
       const alt = el.role === 'logo' ? 'Company logo' : 'Project photo';
-      return `<div class="element el-image" data-id="${escapeHtml(el.id)}" data-role="${escapeHtml(el.role||'photo')}" style="${style}"><img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" draggable="false"></div>`;
+      return `<div class="element el-image" data-id="${escapeHtml(el.id)}" data-role="${escapeHtml(el.role||'photo')}" style="${style}${fadeStyle}"><img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" draggable="false"></div>`;
     }
     const label = el.role === 'logo' ? 'Pick a logo in the inspector' : 'Click to add image';
     return `<div class="element el-image el-image-empty" data-id="${el.id}" data-role="${el.role||'photo'}" style="${style}"><span class="no-print">${label}</span></div>`;
@@ -143,9 +169,26 @@ export function renderPage(){
     setKonvaTransformer(null);
   }
   page.innerHTML = state.elements.map(el => elementHTML(el)).join('') + overlayHTML();
+  page.style.backgroundColor = state.page.fill || '#ffffff';
   page.classList.add('konva-editor-active');
   renderKonva();
   syncZoomLayout();
+}
+
+export function fitTextHeightToContent(el, node){
+  const measuredMm = fitTextNodeHeight(node, getPxPerMm());
+  if(measuredMm == null) return;
+  el.height = measuredMm;
+}
+
+export function fitTextNodeHeight(node, pxPerMm){
+  if(!node || !Number.isFinite(pxPerMm) || pxPerMm <= 0) return null;
+  const prevInlineHeight = node.style.height;
+  node.style.height = 'auto';
+  const measuredMm = round1(Math.max(5, node.scrollHeight / pxPerMm));
+  node.style.height = prevInlineHeight;
+  node.style.height = measuredMm + 'mm';
+  return measuredMm;
 }
 
 export function applyElementStyle(id){
@@ -163,6 +206,11 @@ export function applyElementStyle(id){
     node.style.backgroundColor = rectFill(el);
     node.style.borderColor = rectStroke(el);
     node.style.borderWidth = (Number(el.strokeWidth) || 1) + 'px';
+  }
+  if(el.type === 'image'){
+    const gradient = imageFadeGradient(el);
+    node.style.maskImage = gradient;
+    node.style.webkitMaskImage = gradient;
   }
   if(el.type === 'icon'){
     const svg = node.querySelector('svg');
@@ -182,7 +230,16 @@ export function applyElementStyle(id){
     node.style.fontSize = el.fontSize + 'px';
     node.style.fontWeight = el.weight;
     node.style.textAlign = el.align;
-    node.style.fontFamily = el.fontFamily === 'sans' ? 'var(--font-sans)' : el.fontFamily === 'display' ? 'var(--font-display)' : el.fontFamily === 'mono' ? 'var(--font-mono)' : (el.fontFamily === 'gothic' || el.fontFamily === 'century-gothic') ? 'var(--font-gothic)' : '';
+    const familyMap = {
+      sans: 'var(--font-sans)',
+      display: 'var(--font-display)',
+      'serif-alt': 'var(--font-serif-alt)',
+      mono: 'var(--font-mono)',
+      gothic: 'var(--font-gothic)',
+      'century-gothic': 'var(--font-gothic)',
+      script: 'var(--font-script)'
+    };
+    node.style.fontFamily = familyMap[el.fontFamily] || '';
     node.style.fontStyle = el.italic ? 'italic' : '';
     node.style.textDecoration = el.underline ? 'underline' : '';
     node.style.letterSpacing = Number.isFinite(el.letterSpacing) ? el.letterSpacing + 'em' : '';
@@ -193,6 +250,7 @@ export function applyElementStyle(id){
       const value = el.field ? (state.data[el.field] || '') : (el.content || '');
       node.textContent = (el.prefix || '') + value;
     }
+    if(el.autoHeight) fitTextHeightToContent(el, node);
   }
   if(state.selectedIds.has(id)){
     const overlay = document.querySelector(`.selection-overlay[data-id="${id}"]`);
@@ -243,6 +301,8 @@ export function syncInspectorNumbers(id){
 export function updateBoundElementsContent(field){
   state.elements.filter(e => e.type === 'text' && e.field === field).forEach(e => {
     const node = document.querySelector(`#page .element[data-id="${e.id}"]`);
-    if(node && document.activeElement !== node) node.textContent = (e.prefix || '') + (state.data[field] || '');
+    if(!node || document.activeElement === node) return;
+    node.textContent = (e.prefix || '') + (state.data[field] || '');
+    if(e.autoHeight) fitTextHeightToContent(e, node);
   });
 }

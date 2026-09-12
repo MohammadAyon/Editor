@@ -15,9 +15,10 @@ import {
 } from './canvas/zoom.js';
 import {
   selectOnly, toggleSelect, clearSelection, selectAll, addElement,
-  deleteSelection, duplicateSelection, bringSelectionToFront, sendSelectionToBack,
-  bringSelectionForward, sendSelectionBackward, centerSelectionH, centerSelectionV,
-  alignSelection, distributeSelection, flipSelection, rotateSelection, positionSelection
+  deleteSelection, duplicateSelection, copySelection, cutSelection, pasteSelection,
+  bringSelectionToFront, sendSelectionToBack, bringSelectionForward,
+  sendSelectionBackward, centerSelectionH, centerSelectionV, alignSelection,
+  distributeSelection, flipSelection, rotateSelection, positionSelection
 } from './canvas/selection.js';
 import { initCanvasEvents, onPageMouseDown } from './canvas/drag-resize.js';
 import {
@@ -31,8 +32,8 @@ import {
 } from './presets/presets.js';
 import {
   recordProject, renderProjectsList, reprintProject, deleteProject, generateCover,
-  onCreateFieldInput, triggerCreatePhotoUpload, onCreatePhotoSelected, updateDropzonePreview,
-  onCreatePresetChange, renderCreatePreview, scalePreviewTo, setCreateZoom, changeCreateZoom,
+  onCreateFieldInput, triggerCreatePhotoUpload, onCreatePhotoSelected, clearCreateProjectImage,
+  updateDropzonePreview, onCreatePresetChange, renderCreatePreview, scalePreviewTo, setCreateZoom, changeCreateZoom,
   resetCreateZoom, onCreateCanvasWheel, updateCreateZoomReadout, centerCreatePage
 } from './projects/projects.js';
 import {
@@ -42,7 +43,7 @@ import { exportTemplate, importTemplateFile } from './template-io.js';
 import { showAuthGate, showAppShell, handleSignIn, handleSignOut } from './auth-ui.js';
 import {
   applyPageCSSVars, updatePrintStyle, updatePageSub, onPageSizeChange,
-  syncPageSizeSelect, buildRulerLabels, syncPageConfig
+  syncPageSizeSelect, buildRulerLabels, syncPageConfig, setPageFill
 } from './page-config.js';
 
 export function getActiveTab(){
@@ -304,12 +305,13 @@ Object.assign(window, {
   changeZoom, resetZoom, setZoom,
   changeCreateZoom, resetCreateZoom, setCreateZoom,
   // Page size & config
-  onPageSizeChange, syncPageConfig,
+  onPageSizeChange, syncPageConfig, setPageFill,
   // Elements & selection
   addElement, selectOnly, toggleSelect, clearSelection, selectAll,
-  deleteSelection, duplicateSelection, bringSelectionToFront, sendSelectionToBack,
-  bringSelectionForward, sendSelectionBackward, centerSelectionH, centerSelectionV,
-  alignSelection, distributeSelection, flipSelection, rotateSelection, positionSelection,
+  deleteSelection, duplicateSelection, copySelection, cutSelection, pasteSelection,
+  bringSelectionToFront, sendSelectionToBack, bringSelectionForward,
+  sendSelectionBackward, centerSelectionH, centerSelectionV, alignSelection,
+  distributeSelection, flipSelection, rotateSelection, positionSelection,
   // Data input & inspector
   onDataInput, updateNum, updateProp, setImageRatioPreset, applyCustomImageRatio,
   selectLayer, triggerImageUpload, filterIconGrid,
@@ -319,7 +321,7 @@ Object.assign(window, {
   saveCurrentAsPreset, loadPresetForEditing, updateLoadedPreset, deletePreset,
   renderSavedPresetsList, refreshPresetSelect,
   // Projects
-  onCreateFieldInput, triggerCreatePhotoUpload, onCreatePhotoSelected,
+  onCreateFieldInput, triggerCreatePhotoUpload, onCreatePhotoSelected, clearCreateProjectImage,
   onCreatePresetChange, generateCover, reprintProject, deleteProject,
   // Template IO
   exportTemplate, importTemplateFile,

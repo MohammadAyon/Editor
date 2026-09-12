@@ -215,6 +215,120 @@ export const ICONS = [
     label: '3D Box',
     category: 'architecture',
     path: 'M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z M3.27 6.96L12 12.01l8.73-5.05 M12 22.08V12'
+  },
+  {
+    id: 'bolt',
+    label: 'Bolt',
+    category: 'badge',
+    path: 'M13 2L4 13h7l-1 9 9-11h-7l1-9z'
+  },
+  {
+    id: 'sun',
+    label: 'Sun',
+    category: 'media',
+    path: 'M12 2v2 M12 20v2 M4.93 4.93l1.41 1.41 M17.66 17.66l1.41 1.41 M2 12h2 M20 12h2 M4.93 19.07l1.41-1.41 M17.66 6.34l1.41-1.41 M12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12z'
+  },
+  {
+    id: 'moon',
+    label: 'Moon',
+    category: 'media',
+    path: 'M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z'
+  },
+  {
+    id: 'leaf',
+    label: 'Leaf',
+    category: 'architecture',
+    path: 'M19 3C9.4 3 3 9.7 3 19c9.3 0 16-6.4 16-16z M3 19c2.5-2.5 5-4 10-4'
+  },
+  {
+    id: 'droplet',
+    label: 'Droplet',
+    category: 'media',
+    path: 'M12 2.69l5.66 6.56c1.7 1.97 1.7 5.04 0 7.01A5.56 5.56 0 0 1 12 20a5.56 5.56 0 0 1-5.66-3.74c-1.7-1.97-1.7-5.04 0-7.01L12 2.69z'
+  },
+  {
+    id: 'plane',
+    label: 'Plane',
+    category: 'navigation',
+    path: 'M2 16l20-8-8 20-2-8-10-4z M8 14l14-6'
+  },
+  {
+    id: 'gift',
+    label: 'Gift',
+    category: 'badge',
+    path: 'M20 12v8H4v-8 M2 8h20v4H2z M12 8s-2-8-6-8c-2 0-2 4 0 6s6 2 6 2zm0 0s2-8 6-8c2 0 2 4 0 6s-6 2-6 2z'
+  },
+  {
+    id: 'wifi',
+    label: 'Wi‑Fi',
+    category: 'contact',
+    path: 'M5 12.55A11 11 0 0 1 19 12.55 M1.42 9.44A16.72 16.72 0 0 1 22.58 9.44 M8.53 16.11a5 5 0 0 1 6.94 0 M12 21h.01'
+  },
+  {
+    id: 'sparkles',
+    label: 'Sparkles',
+    category: 'badge',
+    path: 'M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z M18 15l.75 2.25L21 18l-2.25.75L18 21l-.75-2.25L15 18l2.25-.75L18 15z M6 15l.75 2.25L9 18l-2.25.75L6 21l-.75-2.25L3 18l2.25-.75L6 15z'
+  },
+  {
+    id: 'shopping-bag',
+    label: 'Shopping Bag',
+    category: 'document',
+    path: 'M6 8h12l-1 12H7L6 8z M9 8V6a3 3 0 0 1 6 0v2'
+  },
+  {
+    id: 'cup',
+    label: 'Cup',
+    category: 'document',
+    path: 'M6 8h12v7a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z M6 8V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2 M6 12h12'
+  },
+  {
+    id: 'warehouse',
+    label: 'Warehouse',
+    category: 'architecture',
+    path: 'M3 21h18 M4 21V7l8-4 8 4v14 M8 11h8 M8 15h8'
+  },
+  {
+    id: 'location-cross',
+    label: 'Location Cross',
+    category: 'navigation',
+    path: 'M12 22s8-4 8-10a8 8 0 1 0-16 0c0 6 8 10 8 10z M12 8v8 M8 12h8'
+  },
+  {
+    id: 'gear',
+    label: 'Gear / Settings',
+    category: 'architecture',
+    path: 'M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.42 1.42-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V20h-2v-.48a1.7 1.7 0 0 0-1.03-1.56 1.7 1.7 0 0 0-1.88.34l-.06.06-1.42-1.42.06-.06A1.7 1.7 0 0 0 9.4 15a1.7 1.7 0 0 0-1.56-1.03H7v-2h.84A1.7 1.7 0 0 0 9.4 10a1.7 1.7 0 0 0-.34-1.88L9 8.06l1.42-1.42.06.06A1.7 1.7 0 0 0 12.36 7 1.7 1.7 0 0 0 13.4 5.44V5h2v.44A1.7 1.7 0 0 0 16.43 7a1.7 1.7 0 0 0 1.88-.3l.06-.06 1.42 1.42-.06.06A1.7 1.7 0 0 0 19.4 10a1.7 1.7 0 0 0 1.56 1.03H21v2h-.04A1.7 1.7 0 0 0 19.4 15z'
+  },
+  {
+    id: 'family',
+    label: 'Family',
+    category: 'contact',
+    path: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75 M12 21v-2a4 4 0 0 0-4-4'
+  },
+  {
+    id: 'mountain',
+    label: 'Mountain',
+    category: 'terrain',
+    path: 'M3 20l7-12 4 6 2-3 5 9H3z M10 8l2-3 2 3'
+  },
+  {
+    id: 'mountain-sun',
+    label: 'Mountain and Sun',
+    category: 'terrain',
+    path: 'M3 20l7-11 4 6 2-3 5 8H3z M17 5a2 2 0 1 0 0 4 2 2 0 0 0 0-4z'
+  },
+  {
+    id: 'terrain-lines',
+    label: 'Terrain Lines',
+    category: 'terrain',
+    path: 'M3 7c3-3 6-3 9 0s6 3 9 0 M3 12c3-3 6-3 9 0s6 3 9 0 M3 17c3-3 6-3 9 0s6 3 9 0'
+  },
+  {
+    id: 'valley',
+    label: 'Valley',
+    category: 'terrain',
+    path: 'M2 6l6 6 4-5 4 5 6-6 M2 18l6-6 4 5 4-5 6 6'
   }
 ];
 

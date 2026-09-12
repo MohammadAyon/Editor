@@ -3,7 +3,7 @@ import { state, projects, setProjects, createData, createZoom, setCreateZoom as 
 import { db, uploadCoverImage, signedCoverImageUrl, deleteCoverImage, currentUserId } from '../data/supabase-client.js';
 import { saveToStorage, LS_KEYS } from '../data/storage.js';
 import { getSelectedPreset } from '../presets/presets.js';
-import { elementHTML, resolvePrintImages } from '../canvas/dom-render.js';
+import { elementHTML, resolvePrintImages, fitTextNodeHeight } from '../canvas/dom-render.js';
 import { updatePrintStyle } from '../page-config.js';
 
 export function onCreateFieldInput(field, value){
@@ -22,6 +22,17 @@ export function onCreatePhotoSelected(file){
   if(createData.projectImagePreviewUrl) URL.revokeObjectURL(createData.projectImagePreviewUrl);
   createData.projectImagePreviewUrl = URL.createObjectURL(file);
   createData.projectImage = createData.projectImagePreviewUrl;
+  state.data.projectImage = createData.projectImage;
+  updateDropzonePreview();
+  renderCreatePreview();
+}
+
+export function clearCreateProjectImage(){
+  if(createData.projectImagePreviewUrl) URL.revokeObjectURL(createData.projectImagePreviewUrl);
+  createData.projectImagePreviewUrl = null;
+  createData.projectImageFile = null;
+  createData.projectImage = null;
+  state.data.projectImage = null;
   updateDropzonePreview();
   renderCreatePreview();
 }
@@ -96,6 +107,16 @@ export function renderCreatePreview(){
   const pageEl = document.getElementById('projectPage');
   if(!preset || !pageEl) return;
   pageEl.innerHTML = preset.elements.map(el => elementHTML(el, createData)).join('');
+  pageEl.style.backgroundColor = preset.page.fill || '#ffffff';
+  pageEl.style.transform = 'none';
+  pageEl.style.width = preset.page.width + 'mm';
+  pageEl.style.height = preset.page.height + 'mm';
+  const pxPerMm = pageEl.offsetWidth / Math.max(1, preset.page.width);
+  preset.elements.forEach(el => {
+    if(!el.autoHeight || el.type !== 'text') return;
+    const node = pageEl.querySelector(`.element[data-id="${el.id}"]`);
+    fitTextNodeHeight(node, pxPerMm);
+  });
   scalePreviewTo(pageEl, preset.page.width, preset.page.height);
   requestAnimationFrame(centerCreatePage);
 }
@@ -180,6 +201,16 @@ export async function reprintProject(id, btn){
     const elements = p.presetSnapshot.elements;
     await resolvePrintImages(elements);
     pageEl.innerHTML = elements.map(el => elementHTML(el, data, { forPrint: true })).join('');
+    pageEl.style.backgroundColor = p.presetSnapshot.page.fill || '#ffffff';
+    pageEl.style.transform = 'none';
+    pageEl.style.width = p.presetSnapshot.page.width + 'mm';
+    pageEl.style.height = p.presetSnapshot.page.height + 'mm';
+    const pxPerMm = pageEl.offsetWidth / Math.max(1, p.presetSnapshot.page.width);
+    elements.forEach(el => {
+      if(!el.autoHeight || el.type !== 'text') return;
+      const node = pageEl.querySelector(`.element[data-id="${el.id}"]`);
+      fitTextNodeHeight(node, pxPerMm);
+    });
     scalePreviewTo(pageEl, p.presetSnapshot.page.width, p.presetSnapshot.page.height);
     updatePrintStyle(p.presetSnapshot.page.width, p.presetSnapshot.page.height);
     await waitForImages(pageEl);
@@ -249,6 +280,16 @@ export async function generateCover(){
     const elements = preset.elements;
     await resolvePrintImages(elements);
     pageEl.innerHTML = elements.map(el => elementHTML(el, data, { forPrint: true })).join('');
+    pageEl.style.backgroundColor = preset.page.fill || '#ffffff';
+    pageEl.style.transform = 'none';
+    pageEl.style.width = preset.page.width + 'mm';
+    pageEl.style.height = preset.page.height + 'mm';
+    const pxPerMm = pageEl.offsetWidth / Math.max(1, preset.page.width);
+    elements.forEach(el => {
+      if(!el.autoHeight || el.type !== 'text') return;
+      const node = pageEl.querySelector(`.element[data-id="${el.id}"]`);
+      fitTextNodeHeight(node, pxPerMm);
+    });
     scalePreviewTo(pageEl, preset.page.width, preset.page.height);
     updatePrintStyle(preset.page.width, preset.page.height);
     await waitForImages(pageEl);

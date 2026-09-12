@@ -29,7 +29,7 @@ export function selectAll(){
 export function addElement(type){
   pushUndo();
   let el;
-  if(type === 'text') el = { id: newId('el'), type: 'text', field: null, content: 'New text', x: 20, y: 20, width: 60, height: 10, fontSize: 12, weight: 400, align: 'left', variant: 'body' };
+  if(type === 'text') el = { id: newId('el'), type: 'text', field: null, content: 'New text', x: 20, y: 20, width: 60, height: 10, fontSize: 12, weight: 400, align: 'left', variant: 'body', autoHeight: true };
   if(type === 'image') el = { id: newId('el'), type: 'image', role: 'photo', field: null, x: 20, y: 20, width: 60, height: 60, src: null, originalPath: null };
   if(type === 'logo') el = { id: newId('el'), type: 'image', role: 'logo', logoRef: brandImages.length ? brandImages[0].id : null, x: 20, y: 20, width: 40, height: 40 };
   if(type === 'line') el = { id: newId('el'), type: 'line', x: 20, y: Math.min(260, state.page.height - 20), width: 100, height: 0, stroke: '#171614', strokeWidth: 1 };
@@ -43,12 +43,60 @@ export function addElement(type){
   }
 }
 
+export function copySelection(){
+  const ids = [...state.selectedIds];
+  if(!ids.length) return;
+  const items = ids.map(id => getEl(id)).filter(Boolean).map(el => JSON.parse(JSON.stringify(el)));
+  if(!items.length) return;
+  window.__editorClipboard = JSON.stringify(items);
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(window.__editorClipboard).catch(() => {});
+  }
+}
+
+export function cutSelection(){
+  const ids = [...state.selectedIds];
+  if(!ids.length) return;
+  copySelection();
+  pushUndo();
+  state.elements = state.elements.filter(e => !ids.includes(e.id));
+  state.selectedIds = new Set();
+  if(window.render) window.render();
+}
+
 export function deleteSelection(){
   const ids = [...state.selectedIds];
   if(!ids.length) return;
   pushUndo();
   state.elements = state.elements.filter(e => !ids.includes(e.id));
   state.selectedIds = new Set();
+  if(window.render) window.render();
+}
+
+export function pasteSelection(){
+  let raw = window.__editorClipboard || '';
+  if(!raw && navigator.clipboard && navigator.clipboard.readText){
+    try{
+      raw = navigator.clipboard.readText();
+    }catch(err){ return; }
+  }
+  if(!raw) return;
+  let items;
+  try{ items = JSON.parse(raw); }
+  catch(err){ return; }
+  if(!Array.isArray(items) || !items.length) return;
+  pushUndo();
+  const offset = 10;
+  const nextIds = [];
+  items.forEach((el, index) => {
+    const clone = JSON.parse(JSON.stringify(el));
+    clone.id = newId('el');
+    clone.x = round1(clamp((clone.x || 0) + offset * (index + 1), 0, state.page.width - clone.width));
+    clone.y = round1(clamp((clone.y || 0) + offset * (index + 1), 0, state.page.height - heightOf(clone)));
+    state.elements.push(clone);
+    nextIds.push(clone.id);
+  });
+  state.selectedIds = new Set(nextIds);
   if(window.render) window.render();
 }
 

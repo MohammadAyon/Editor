@@ -8,7 +8,7 @@ import {
 } from '../state/state.js';
 import { getPxPerMm } from './zoom.js';
 import { mmToPx, computeSnap, showGuideV, hideGuideV, showGuideH, hideGuideH } from './snapping.js';
-import { resolveImageSrc, rectFill, rectStroke, lineStroke, lineWidth, clampElementPosition } from './dom-render.js';
+import { resolveImageSrc, resolveImageFade, rectFill, rectStroke, lineStroke, lineWidth, clampElementPosition } from './dom-render.js';
 import { db, uploadCoverImage } from '../data/supabase-client.js';
 import { resizeImageFile } from '../utils/image-resize.js';
 import { getIconPath } from '../icons/icons.js';
@@ -155,12 +155,44 @@ export function konvaTextValue(el){
   return value;
 }
 
+function makeImageContentNode(image, width, height, el){
+  const fade = resolveImageFade(el);
+  if(!fade) return new Konva.Image({ image, width, height, listening:false });
+
+  const angleRad = (fade.angle * Math.PI) / 180;
+  const dx = Math.sin(angleRad), dy = -Math.cos(angleRad);
+  const halfLen = (Math.abs(width * dx) + Math.abs(height * dy)) / 2;
+  const cx = width / 2, cy = height / 2;
+
+  return new Konva.Shape({
+    width, height, listening: false,
+    sceneFunc: ctx => {
+      ctx.drawImage(image, 0, 0, width, height);
+      ctx.globalCompositeOperation = 'destination-in';
+      const grad = ctx.createLinearGradient(cx - dx * halfLen, cy - dy * halfLen, cx + dx * halfLen, cy + dy * halfLen);
+      grad.addColorStop(0, `rgba(0,0,0,${fade.from})`);
+      grad.addColorStop(1, `rgba(0,0,0,${fade.to})`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, width, height);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+  });
+}
+
 export function makeKonvaNode(el){
   const x = mmToPx(el.x), y = mmToPx(el.y), width = mmToPx(el.width), height = mmToPx(el.type === 'line' ? 2 : el.height);
   const visualHeight = height;
   let node;
   if(el.type === 'text'){
-    const familyMap = { sans:'Inter', display:'Fraunces', mono:'IBM Plex Mono', gothic:'Century Gothic', 'century-gothic':'Century Gothic' };
+    const familyMap = {
+      sans: 'Inter',
+      display: 'Fraunces',
+      'serif-alt': 'Cormorant Garamond',
+      mono: 'IBM Plex Mono',
+      gothic: 'Montserrat',
+      'century-gothic': 'Montserrat',
+      script: 'Caveat'
+    };
     const fontFamily = familyMap[el.fontFamily] || (el.variant === 'display' ? 'Fraunces' : 'Inter');
     const fontStyle = [el.italic ? 'italic' : '', el.weight >= 600 ? 'bold' : ''].filter(Boolean).join(' ') || 'normal';
     const fill = el.color || (el.variant === 'label' ? '#7A776E' : '#171614');
@@ -275,7 +307,7 @@ export function makeKonvaNode(el){
     if(src){
       const image = new Image();
       image.onload = () => {
-        node.add(new Konva.Image({ image, width, height, listening:false }));
+        node.add(makeImageContentNode(image, width, height, el));
         if(node.getLayer()) node.getLayer().batchDraw();
       };
       image.src = src;
