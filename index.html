@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Cover generator</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <!-- Strict script CSP is deferred until inline event attributes are migrated. -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob: https:; connect-src 'self' https://ipfgnmmihumhdvbkgnev.supabase.co; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self';">
@@ -242,6 +243,7 @@
         </div>
         <div class="section">
           <h2>Recent projects</h2>
+          <p class="form-error" id="projectsError" role="alert"></p>
           <div id="projectsList"></div>
         </div>
       </aside>

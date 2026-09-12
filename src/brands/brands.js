@@ -71,7 +71,7 @@ export function renderBrandList(){
   if(!box) return;
   box.innerHTML = brandImages.map(b => `
     <div class="brand-row">
-      ${sanitizeImageSrc(b.dataUrl) ? `<img class="brand-thumb" src="${escapeHtml(sanitizeImageSrc(b.dataUrl))}">` : ''}
+      ${sanitizeImageSrc(b.dataUrl) ? `<img class="brand-thumb" src="${escapeHtml(sanitizeImageSrc(b.dataUrl))}" alt="${escapeHtml(b.name || 'Brand logo')}">` : ''}
       <span class="brand-name">${escapeHtml(b.name)}</span>
       <button class="btn tiny danger" onclick="deleteBrandImage('${b.id}')">Remove</button>
     </div>`).join('');

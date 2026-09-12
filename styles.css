@@ -29,7 +29,7 @@
   .auth-kicker{font:10px var(--font-mono);text-transform:uppercase;letter-spacing:.1em;color:var(--gray-500);margin:0 0 10px;}
   .auth-panel input{width:100%;background:transparent;border:0;border-bottom:1px solid var(--border);color:var(--ink);padding:9px 1px;font:13px var(--font-sans);}
   .auth-panel input:focus{outline:none;border-bottom-color:var(--ink);}
-  .auth-error{min-height:18px;color:var(--danger);font-size:12px;line-height:1.4;margin:0 0 12px;}
+  .auth-error, .form-error{min-height:18px;color:var(--danger);font-size:12px;line-height:1.4;margin:0 0 12px;}
   .auth-user{align-self:center;color:var(--gray-500);font-size:10px;white-space:nowrap;}
   .auth-user strong{color:var(--ink);font-weight:500;}
 

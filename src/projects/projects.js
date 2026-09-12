@@ -31,7 +31,7 @@ export function updateDropzonePreview(){
   if(!zone) return;
   const src = sanitizeImageSrc(createData.projectImage);
   zone.innerHTML = src
-    ? `<img src="${escapeHtml(src)}"><div class="replace-hint">Click to replace</div>`
+    ? `<img src="${escapeHtml(src)}" alt="Selected project cover photo"><div class="replace-hint">Click to replace</div>`
     : `<span>Drag a photo here, or click to browse</span>`;
 }
 
@@ -157,38 +157,61 @@ export function renderProjectsList(){
       <div class="project-row-name">${escapeHtml(p.projectName || 'Untitled')}</div>
       <div class="project-row-meta">${escapeHtml(p.presetName)} · ${new Date(p.createdAt).toLocaleDateString()}</div>
       <div class="row-btns">
-        <button class="btn small" onclick="reprintProject('${p.id}')">Reprint</button>
-        <button class="btn small danger" onclick="deleteProject('${p.id}')">Delete</button>
+        <button class="btn small" onclick="reprintProject('${p.id}', this)">Reprint</button>
+        <button class="btn small danger" onclick="deleteProject('${p.id}', this)">Delete</button>
       </div>
     </div>`).join('');
 }
 
-export async function reprintProject(id){
-  const p = projects.find(pr => pr.id === id);
-  if(!p) return;
-  const pageEl = document.getElementById('projectPage');
-  const data = { projectName: p.projectName, location: p.location, clientName: p.clientName, projectImage: p.projectImage };
-  const elements = p.presetSnapshot.elements;
-  await resolvePrintImages(elements);
-  pageEl.innerHTML = elements.map(el => elementHTML(el, data, { forPrint: true })).join('');
-  scalePreviewTo(pageEl, p.presetSnapshot.page.width, p.presetSnapshot.page.height);
-  updatePrintStyle(p.presetSnapshot.page.width, p.presetSnapshot.page.height);
-  await waitForImages(pageEl);
-  window.print();
+function setProjectsError(message){
+  const el = document.getElementById('projectsError');
+  if(el) el.textContent = message || '';
 }
 
-export async function deleteProject(id){
-  const project = projects.find(p => p.id === id);
-  if(db && project){
-    if(project.dbId){
-      const { error } = await db.from('projects').delete().eq('id', project.dbId);
-      if(error){ alert('Could not delete the project from the database: ' + error.message); return; }
-    }
-    await deleteCoverImage(project.projectImagePath);
+export async function reprintProject(id, btn){
+  const p = projects.find(pr => pr.id === id);
+  if(!p) return;
+  setProjectsError('');
+  const label = btn ? btn.textContent : null;
+  if(btn){ btn.disabled = true; btn.textContent = 'Printing…'; }
+  try{
+    const pageEl = document.getElementById('projectPage');
+    const data = { projectName: p.projectName, location: p.location, clientName: p.clientName, projectImage: p.projectImage };
+    const elements = p.presetSnapshot.elements;
+    await resolvePrintImages(elements);
+    pageEl.innerHTML = elements.map(el => elementHTML(el, data, { forPrint: true })).join('');
+    scalePreviewTo(pageEl, p.presetSnapshot.page.width, p.presetSnapshot.page.height);
+    updatePrintStyle(p.presetSnapshot.page.width, p.presetSnapshot.page.height);
+    await waitForImages(pageEl);
+    window.print();
+  }catch(err){
+    setProjectsError('Could not reprint this project: ' + err.message);
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = label; }
   }
-  setProjects(projects.filter(p => p.id !== id));
-  saveToStorage(LS_KEYS.projects, projects);
-  renderProjectsList();
+}
+
+export async function deleteProject(id, btn){
+  const project = projects.find(p => p.id === id);
+  setProjectsError('');
+  const label = btn ? btn.textContent : null;
+  if(btn){ btn.disabled = true; btn.textContent = 'Deleting…'; }
+  try{
+    if(db && project){
+      if(project.dbId){
+        const { error } = await db.from('projects').delete().eq('id', project.dbId);
+        if(error){ setProjectsError('Could not delete the project from the database: ' + error.message); return; }
+      }
+      await deleteCoverImage(project.projectImagePath);
+    }
+    setProjects(projects.filter(p => p.id !== id));
+    saveToStorage(LS_KEYS.projects, projects);
+    renderProjectsList();
+  }catch(err){
+    setProjectsError('Could not delete this project: ' + err.message);
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = label; }
+  }
 }
 
 function waitForImages(container){

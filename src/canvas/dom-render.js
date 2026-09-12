@@ -60,7 +60,10 @@ export function elementHTML(el, dataSource, options){
   }
   if(el.type === 'image'){
     const src = resolveImageSrc(el, dataSource, options);
-    if(src) return `<div class="element el-image" data-id="${escapeHtml(el.id)}" data-role="${escapeHtml(el.role||'photo')}" style="${style}"><img src="${escapeHtml(src)}" draggable="false"></div>`;
+    if(src){
+      const alt = el.role === 'logo' ? 'Company logo' : 'Project photo';
+      return `<div class="element el-image" data-id="${escapeHtml(el.id)}" data-role="${escapeHtml(el.role||'photo')}" style="${style}"><img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" draggable="false"></div>`;
+    }
     const label = el.role === 'logo' ? 'Pick a logo in the inspector' : 'Click to add image';
     return `<div class="element el-image el-image-empty" data-id="${el.id}" data-role="${el.role||'photo'}" style="${style}"><span class="no-print">${label}</span></div>`;
   }
