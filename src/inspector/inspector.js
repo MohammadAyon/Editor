@@ -172,6 +172,7 @@ export function renderInspector(){
             <option value="projectName" ${el.field==='projectName' ? 'selected' : ''}>Project name</option>
             <option value="location" ${el.field==='location' ? 'selected' : ''}>Location</option>
             <option value="clientName" ${el.field==='clientName' ? 'selected' : ''}>Client name</option>
+            <option value="drawingType" ${el.field==='drawingType' ? 'selected' : ''}>Drawing type</option>
           </select>
         </div>`;
       if(el.field){

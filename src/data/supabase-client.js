@@ -47,7 +47,7 @@ export function brandImageFromRow(row){
 export function projectFromRow(row){
   return {
     id: row.id, dbId: row.id, projectName: row.project_name, location: row.location,
-    clientName: row.client_name, projectImage: null, projectImagePath: row.project_image_url,
+    clientName: row.client_name, drawingType: row.drawing_type || 'ARCHITECTURAL DRAWING', projectImage: null, projectImagePath: row.project_image_url,
     presetId: row.preset_id, presetName: row.preset_name,
     presetSnapshot: row.preset_snapshot, createdAt: row.created_at
   };

@@ -341,6 +341,7 @@ function init(){
   const cpProjectName = document.getElementById('cp-projectName');
   const cpLocation = document.getElementById('cp-location');
   const cpClientName = document.getElementById('cp-clientName');
+  const cpDrawingType = document.getElementById('cp-drawingType');
 
   if(dataProjectName) dataProjectName.value = state.data.projectName;
   if(dataLocation) dataLocation.value = state.data.location;
@@ -348,6 +349,7 @@ function init(){
   if(cpProjectName) cpProjectName.value = createData.projectName;
   if(cpLocation) cpLocation.value = createData.location;
   if(cpClientName) cpClientName.value = createData.clientName;
+  if(cpDrawingType) cpDrawingType.value = createData.drawingType;
 
   const cpDropzoneEl = document.getElementById('cpDropzone');
   if(cpDropzoneEl){

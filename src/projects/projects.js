@@ -128,6 +128,7 @@ export async function recordProject(preset){
     projectName: createData.projectName,
     location: createData.location,
     clientName: createData.clientName,
+    drawingType: createData.drawingType,
     projectImage: null,
     presetId: preset.id,
     presetName: preset.name,
@@ -145,6 +146,7 @@ export async function recordProject(preset){
         project_name: project.projectName,
         location: project.location,
         client_name: project.clientName,
+        drawing_type: project.drawingType,
         preset_id: preset.id,
         preset_name: project.presetName,
         preset_snapshot: project.presetSnapshot,
@@ -197,7 +199,7 @@ export async function reprintProject(id, btn){
   if(btn){ btn.disabled = true; btn.textContent = 'Printing…'; }
   try{
     const pageEl = document.getElementById('projectPage');
-    const data = { projectName: p.projectName, location: p.location, clientName: p.clientName, projectImage: p.projectImage };
+    const data = { projectName: p.projectName, location: p.location, clientName: p.clientName, drawingType: p.drawingType || 'ARCHITECTURAL DRAWING', projectImage: p.projectImage };
     const elements = p.presetSnapshot.elements;
     await resolvePrintImages(elements);
     pageEl.innerHTML = elements.map(el => elementHTML(el, data, { forPrint: true })).join('');
@@ -276,7 +278,7 @@ export async function generateCover(){
     // Use the signed URL from Supabase if available, otherwise fall back to the
     // current-session object URL so the photo always appears in the print output.
     const printImage = project.projectImage || createData.projectImage || null;
-    const data = { projectName: project.projectName, location: project.location, clientName: project.clientName, projectImage: printImage };
+    const data = { projectName: project.projectName, location: project.location, clientName: project.clientName, drawingType: project.drawingType || 'ARCHITECTURAL DRAWING', projectImage: printImage };
     const elements = preset.elements;
     await resolvePrintImages(elements);
     pageEl.innerHTML = elements.map(el => elementHTML(el, data, { forPrint: true })).join('');

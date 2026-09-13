@@ -18,7 +18,7 @@ export const PAGE_SIZES = { A4: { w:210, h:297 }, A3: { w:297, h:420 } };
 export const state = {
   page: { size:'A4', orientation:'portrait', width:210, height:297, fill:'#ffffff' },
   zoom: 1,
-  data: { projectName:'Midnight Bloom', location:'Dhaka, Bangladesh', clientName:'John Smith', projectImage:null },
+  data: { projectName:'Midnight Bloom', location:'Dhaka, Bangladesh', clientName:'John Smith', drawingType:'ARCHITECTURAL DRAWING', projectImage:null },
   elements: [
     { id:'el_image',    type:'image', role:'photo', field:'projectImage', x:20, y:20,  width:170, height:170, originalPath: null },
     { id:'el_divider',  type:'line',  x:20, y:200, width:170, height:0 },
@@ -45,6 +45,7 @@ export const createData = {
   projectName: 'Riverside Residence',
   location:    'Chattogram, Bangladesh',
   clientName:  'John Smith',
+  drawingType: 'ARCHITECTURAL DRAWING',
   projectImage:     null,
   projectImageFile: null
 };

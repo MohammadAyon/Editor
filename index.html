@@ -201,6 +201,17 @@
             <label>Client name</label>
             <input type="text" id="cp-clientName" oninput="onCreateFieldInput('clientName', this.value)">
           </div>
+          <div class="field">
+            <label>Drawing type</label>
+            <select id="cp-drawingType" onchange="onCreateFieldInput('drawingType', this.value)">
+              <option value="ARCHITECTURAL DRAWING">Architectural drawing</option>
+              <option value="STRUCTURAL DRAWING">Structural drawing</option>
+              <option value="ELECTRICAL DRAWING">Electrical drawing</option>
+              <option value="PLUMBING DRAWING">Plumbing drawing</option>
+              <option value="FIRE SAFETY DRAWING">Fire safety drawing</option>
+              <option value="MECHANICAL DRAWING">Mechanical drawing</option>
+            </select>
+          </div>
         </div>
 
         <div class="section">

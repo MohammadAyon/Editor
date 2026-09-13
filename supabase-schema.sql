@@ -14,6 +14,7 @@ create table if not exists public.projects (
   project_name text not null,
   location text,
   client_name text,
+  drawing_type text not null default 'ARCHITECTURAL DRAWING',
   preset_id uuid references public.presets(id) on delete set null,
   preset_name text not null,
   preset_snapshot jsonb not null,
@@ -38,6 +39,7 @@ alter table public.brand_images enable row level security;
 -- account in the dashboard, then set them NOT NULL before applying policies.
 alter table public.presets add column if not exists owner_id uuid references auth.users(id);
 alter table public.projects add column if not exists owner_id uuid references auth.users(id);
+alter table public.projects add column if not exists drawing_type text not null default 'ARCHITECTURAL DRAWING';
 alter table public.brand_images add column if not exists owner_id uuid references auth.users(id);
 
 drop policy if exists "Public can read presets" on public.presets;
