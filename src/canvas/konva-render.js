@@ -163,20 +163,18 @@ function makeImageContentNode(image, width, height, el){
   const dx = Math.sin(angleRad), dy = -Math.cos(angleRad);
   const halfLen = (Math.abs(width * dx) + Math.abs(height * dy)) / 2;
   const cx = width / 2, cy = height / 2;
-
-  return new Konva.Shape({
-    width, height, listening: false,
-    sceneFunc: ctx => {
-      ctx.drawImage(image, 0, 0, width, height);
-      ctx.globalCompositeOperation = 'destination-in';
-      const grad = ctx.createLinearGradient(cx - dx * halfLen, cy - dy * halfLen, cx + dx * halfLen, cy + dy * halfLen);
-      grad.addColorStop(0, `rgba(0,0,0,${fade.from})`);
-      grad.addColorStop(1, `rgba(0,0,0,${fade.to})`);
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, width, height);
-      ctx.globalCompositeOperation = 'source-over';
-    }
-  });
+  const fadedCanvas = document.createElement('canvas');
+  fadedCanvas.width = Math.max(1, Math.ceil(width));
+  fadedCanvas.height = Math.max(1, Math.ceil(height));
+  const context = fadedCanvas.getContext('2d');
+  context.drawImage(image, 0, 0, width, height);
+  context.globalCompositeOperation = 'destination-in';
+  const gradient = context.createLinearGradient(cx - dx * halfLen, cy - dy * halfLen, cx + dx * halfLen, cy + dy * halfLen);
+  gradient.addColorStop(0, `rgba(0,0,0,${fade.from})`);
+  gradient.addColorStop(1, `rgba(0,0,0,${fade.to})`);
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, width, height);
+  return new Konva.Image({ image: fadedCanvas, width, height, listening:false });
 }
 
 export function makeKonvaNode(el){

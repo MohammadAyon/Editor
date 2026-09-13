@@ -52,7 +52,7 @@ export function updateProp(id, prop, value){
   if(!el) return;
   pushUndoDebounced('prop:' + id + ':' + prop);
   el[prop] = value;
-  if(prop === 'src' || prop === 'variant' || prop === 'logoRef' || prop === 'fill' || prop === 'stroke' || prop === 'strokeWidth' || prop === 'field' || prop === 'icon' || prop === 'color' || prop === 'filled'){
+  if(prop === 'src' || prop === 'variant' || prop === 'logoRef' || prop === 'fill' || prop === 'stroke' || prop === 'strokeWidth' || prop === 'field' || prop === 'icon' || prop === 'color' || prop === 'filled' || prop === 'fade' || prop === 'fadeAngle' || prop === 'fadeFrom' || prop === 'fadeTo'){
     renderPage();
     renderInspector();
   } else {

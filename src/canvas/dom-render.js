@@ -49,6 +49,12 @@ export function imageFadeGradient(el){
   return `linear-gradient(${fade.angle}deg, rgba(0,0,0,${fade.from}) 0%, rgba(0,0,0,${fade.to}) 100%)`;
 }
 
+function imageFadeCSS(el){
+  const gradient = imageFadeGradient(el);
+  if(!gradient) return '';
+  return `mask-image:${gradient};-webkit-mask-image:${gradient};mask-mode:alpha;-webkit-mask-mode:alpha;mask-repeat:no-repeat;-webkit-mask-repeat:no-repeat;mask-size:100% 100%;-webkit-mask-size:100% 100%;`;
+}
+
 export function resolveImageSrc(el, dataSource, options){
   const forPrint = options && options.forPrint;
   if(el.role === 'logo'){
@@ -84,11 +90,10 @@ export function elementHTML(el, dataSource, options){
   }
   if(el.type === 'image'){
     const src = resolveImageSrc(el, dataSource, options);
-    const gradient = imageFadeGradient(el);
-    const fadeStyle = gradient ? `mask-image:${gradient};-webkit-mask-image:${gradient};mask-mode:alpha;-webkit-mask-mode:alpha;` : '';
+    const fadeStyle = imageFadeCSS(el);
     if(src){
       const alt = el.role === 'logo' ? 'Company logo' : 'Project photo';
-      return `<div class="element el-image" data-id="${escapeHtml(el.id)}" data-role="${escapeHtml(el.role||'photo')}" style="${style}${fadeStyle}"><img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" draggable="false"></div>`;
+      return `<div class="element el-image" data-id="${escapeHtml(el.id)}" data-role="${escapeHtml(el.role||'photo')}" style="${style}"><img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" draggable="false" style="${fadeStyle}"></div>`;
     }
     const label = el.role === 'logo' ? 'Pick a logo in the inspector' : 'Click to add image';
     return `<div class="element el-image el-image-empty" data-id="${el.id}" data-role="${el.role||'photo'}" style="${style}"><span class="no-print">${label}</span></div>`;
@@ -208,9 +213,17 @@ export function applyElementStyle(id){
     node.style.borderWidth = (Number(el.strokeWidth) || 1) + 'px';
   }
   if(el.type === 'image'){
+    const image = node.querySelector('img');
     const gradient = imageFadeGradient(el);
-    node.style.maskImage = gradient;
-    node.style.webkitMaskImage = gradient;
+    if(image){
+      image.style.maskImage = gradient;
+      image.style.webkitMaskImage = gradient;
+      image.style.maskMode = gradient ? 'alpha' : '';
+      image.style.webkitMaskRepeat = gradient ? 'no-repeat' : '';
+      image.style.maskRepeat = gradient ? 'no-repeat' : '';
+      image.style.webkitMaskSize = gradient ? '100% 100%' : '';
+      image.style.maskSize = gradient ? '100% 100%' : '';
+    }
   }
   if(el.type === 'icon'){
     const svg = node.querySelector('svg');

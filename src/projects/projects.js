@@ -2,7 +2,7 @@
 import { state, projects, setProjects, createData, createZoom, setCreateZoom as setStateCreateZoom, newId, clamp, escapeHtml, sanitizeImageSrc } from '../state/state.js';
 import { db, uploadCoverImage, signedCoverImageUrl, deleteCoverImage, currentUserId } from '../data/supabase-client.js';
 import { saveToStorage, LS_KEYS } from '../data/storage.js';
-import { getSelectedPreset } from '../presets/presets.js';
+import { getSelectedPreset, hydratePresetElements } from '../presets/presets.js';
 import { elementHTML, resolvePrintImages, fitTextNodeHeight } from '../canvas/dom-render.js';
 import { updatePrintStyle } from '../page-config.js';
 
@@ -106,6 +106,13 @@ export function renderCreatePreview(){
   const preset = getSelectedPreset();
   const pageEl = document.getElementById('projectPage');
   if(!preset || !pageEl) return;
+  if(db && preset.elements.some(el => el.type === 'image' && el.originalPath && !el.src)){
+    hydratePresetElements(preset.elements).then(() => {
+      if(getSelectedPreset() === preset && preset.elements.some(el => el.type === 'image' && el.originalPath && el.src)){
+        renderCreatePreview();
+      }
+    });
+  }
   pageEl.innerHTML = preset.elements.map(el => elementHTML(el, createData)).join('');
   pageEl.style.backgroundColor = preset.page.fill || '#ffffff';
   pageEl.style.transform = 'none';
