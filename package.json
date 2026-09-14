@@ -1,5 +1,11 @@
 {
+  "name": "editor-cover-generator",
+  "version": "1.0.0",
   "type": "module",
+  "scripts": {
+    "test": "node --test tests/**/*.test.js",
+    "check": "node --check src/data/supabase-client.js && node --check src/auth-ui.js && node --check src/brands/brands.js && node --check src/presets/presets.js && node --check src/projects/projects.js"
+  },
   "dependencies": {
     "konva": "^10.3.1"
   }

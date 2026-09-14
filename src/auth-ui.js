@@ -17,6 +17,7 @@ export async function handleSignIn(){
   const errorEl = document.getElementById('authError');
   const button = document.getElementById('authSubmitBtn');
   errorEl.textContent = '';
+  if(!db){ errorEl.textContent = 'Database is not configured.'; return; }
   const email = document.getElementById('authEmail').value.trim();
   const password = document.getElementById('authPassword').value;
   if(!email || !password){ errorEl.textContent = 'Enter your email and password.'; return; }

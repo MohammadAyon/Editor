@@ -1,6 +1,6 @@
 // src/brands/brands.js — Brand assets / logos management (isolated from project photos)
 import { brandImages, setBrandImages, newId, escapeHtml, sanitizeImageSrc } from '../state/state.js';
-import { db, currentUserId, uploadCoverImage, signedCoverImageUrl, deleteCoverImage } from '../data/supabase-client.js';
+import { db, currentUserId, uploadCoverImage, signedCoverImageUrl, deleteCoverImage, requireSignedInUser } from '../data/supabase-client.js';
 import { saveToStorage, LS_KEYS } from '../data/storage.js';
 import { renderPage } from '../canvas/dom-render.js';
 import { renderInspector } from '../inspector/inspector.js';
@@ -36,8 +36,9 @@ export async function uploadBrandImage(name, file){
   renderInspector();
   if(db){
     try{
+      const ownerId = requireSignedInUser('save a logo');
       const storagePath = await uploadCoverImage(file, 'logos');
-      const { data, error } = await db.from('brand_images').insert({ name, image_url: storagePath, owner_id: currentUserId() }).select().single();
+      const { data, error } = await db.from('brand_images').insert({ name, image_url: storagePath, owner_id: ownerId }).select().single();
       if(error) throw error;
       img.dbId = data.id;
       img.storagePath = storagePath;
@@ -55,9 +56,15 @@ export async function uploadBrandImage(name, file){
 export async function deleteBrandImage(id){
   const img = brandImages.find(b => b.id === id);
   if(db && img && img.dbId){
-    const { error } = await db.from('brand_images').delete().eq('id', img.dbId);
-    if(error){ alert('Could not delete the logo from the database: ' + error.message); return; }
-    await deleteCoverImage(img.storagePath);
+    try{
+      requireSignedInUser('delete a logo');
+      const { error } = await db.from('brand_images').delete().eq('id', img.dbId);
+      if(error){ alert('Could not delete the logo from the database: ' + error.message); return; }
+      await deleteCoverImage(img.storagePath);
+    }catch(err){
+      alert(err.message);
+      return;
+    }
   }
   setBrandImages(brandImages.filter(b => b.id !== id));
   saveToStorage(LS_KEYS.brandImages, brandImages);

@@ -1,6 +1,6 @@
 // src/presets/presets.js — Preset file save, load, update, delete, and list management
 import { state, presets, setPresets, editingPresetId, setEditingPresetId, newId, advanceIdCounter, undoStack, redoStack, escapeHtml } from '../state/state.js';
-import { db, presetToRow, presetFromRow, signedCoverImageUrl } from '../data/supabase-client.js';
+import { db, presetToRow, presetFromRow, signedCoverImageUrl, requireSignedInUser } from '../data/supabase-client.js';
 import { saveToStorage, LS_KEYS } from '../data/storage.js';
 import { syncPageConfig } from '../page-config.js';
 
@@ -76,7 +76,10 @@ export async function saveCurrentAsPreset(){
   };
   if(db){
     try{
-      const { data, error } = await db.from('presets').insert(presetToRow(preset)).select().single();
+      const ownerId = requireSignedInUser('save a preset');
+      const row = presetToRow(preset);
+      row.owner_id = ownerId;
+      const { data, error } = await db.from('presets').insert(row).select().single();
       if(error) throw error;
       preset.id = data.id;
     }catch(err){
@@ -126,8 +129,16 @@ export async function updateLoadedPreset(){
     elements: stripProxiesForPresetStorage(JSON.parse(JSON.stringify(state.elements)))
   };
   if(db){
-    const { error } = await db.from('presets').update(presetToRow(updated)).eq('id', preset.id);
-    if(error){ alert('Could not update this preset: ' + error.message); return; }
+    try{
+      requireSignedInUser('update this preset');
+      const row = presetToRow(updated);
+      row.owner_id = currentUserId();
+      const { error } = await db.from('presets').update(row).eq('id', preset.id);
+      if(error){ alert('Could not update this preset: ' + error.message); return; }
+    }catch(err){
+      alert(err.message);
+      return;
+    }
   }
   const index = presets.findIndex(item => item.id === preset.id);
   if(index >= 0) presets[index] = updated;
@@ -146,8 +157,13 @@ export async function deletePreset(id){
   refreshPresetSelect();
   if(window.renderCreatePreview) window.renderCreatePreview();
   if(db){
-    const { error } = await db.from('presets').delete().eq('id', id);
-    if(error) console.warn('Could not delete preset from the database', error);
+    try{
+      requireSignedInUser('delete a preset');
+      const { error } = await db.from('presets').delete().eq('id', id);
+      if(error) console.warn('Could not delete preset from the database', error);
+    }catch(err){
+      console.warn(err.message);
+    }
   }
   if(editingPresetId === id) setEditingPresetId(null);
   renderPresetSaveState();

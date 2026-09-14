@@ -1,4 +1,4 @@
-// src/data/storage.js â€” localStorage cache helpers
+// src/data/storage.js — localStorage cache helpers
 export const LS_KEYS = {
   presets:     'coverGenerator:presets',
   brandImages: 'coverGenerator:brandImages',
@@ -6,10 +6,27 @@ export const LS_KEYS = {
   debugMode:   'coverGenerator:debugMode'
 };
 
-export function loadFromStorage(key){
-  if(typeof localStorage === 'undefined') return null;
-  try{ const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; }
-  catch(err){ console.warn('Could not read', key, err); return null; }
+export function withFallback(value, fallback){
+  return value === undefined || value === null ? fallback : value;
+}
+
+export function normalizeStoredList(value){
+  return Array.isArray(value) ? value : [];
+}
+
+export function loadFromStorage(key, options = {}){
+  const fallback = options.fallback ?? null;
+  if(typeof localStorage === 'undefined') return fallback;
+  try{
+    const raw = localStorage.getItem(key);
+    if(!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return withFallback(parsed, fallback);
+  }
+  catch(err){
+    console.warn('Could not read', key, err);
+    return fallback;
+  }
 }
 
 export function saveToStorage(key, value){

@@ -1,6 +1,6 @@
 // src/projects/projects.js — Create project panel, preview, zoom, project storage, and reprint
 import { state, projects, setProjects, createData, createZoom, setCreateZoom as setStateCreateZoom, newId, clamp, escapeHtml, sanitizeImageSrc } from '../state/state.js';
-import { db, uploadCoverImage, signedCoverImageUrl, deleteCoverImage, currentUserId } from '../data/supabase-client.js';
+import { db, uploadCoverImage, signedCoverImageUrl, deleteCoverImage, currentUserId, requireSignedInUser } from '../data/supabase-client.js';
 import { saveToStorage, LS_KEYS } from '../data/storage.js';
 import { getSelectedPreset, hydratePresetElements } from '../presets/presets.js';
 import { elementHTML, resolvePrintImages, fitTextNodeHeight } from '../canvas/dom-render.js';
@@ -147,6 +147,7 @@ export async function recordProject(preset){
   renderProjectsList();
   if(db){
     try{
+      const ownerId = requireSignedInUser('save a project');
       let hostedUrl = null;
       if(createData.projectImageFile) hostedUrl = await uploadCoverImage(createData.projectImageFile, 'projects');
       const row = {
@@ -158,7 +159,7 @@ export async function recordProject(preset){
         preset_name: project.presetName,
         preset_snapshot: project.presetSnapshot,
         project_image_url: hostedUrl,
-        owner_id: currentUserId()
+        owner_id: ownerId
       };
       const { data, error } = await db.from('projects').insert(row).select().single();
       if(error) throw error;
@@ -238,6 +239,12 @@ export async function deleteProject(id, btn){
   if(btn){ btn.disabled = true; btn.textContent = 'Deleting…'; }
   try{
     if(db && project){
+      try{
+        requireSignedInUser('delete a project');
+      }catch(err){
+        setProjectsError(err.message);
+        return;
+      }
       if(project.dbId){
         const { error } = await db.from('projects').delete().eq('id', project.dbId);
         if(error){ setProjectsError('Could not delete the project from the database: ' + error.message); return; }

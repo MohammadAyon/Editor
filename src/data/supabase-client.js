@@ -14,10 +14,18 @@ export function currentUserId(){
   return currentSession && currentSession.user ? currentSession.user.id : null;
 }
 
+export function requireSignedInUser(action){
+  if(!db) throw new Error('Database is not configured.');
+  const userId = currentUserId();
+  if(!userId) throw new Error(`You must be signed in to ${action}.`);
+  return userId;
+}
+
 export async function uploadCoverImage(file, folder){
+  const userId = requireSignedInUser('upload an image');
   const ext = file.name && file.name.includes('.') ? file.name.split('.').pop() : 'png';
   const path = `${folder}/${crypto.randomUUID()}.${ext}`;
-  const { error } = await db.storage.from(COVER_BUCKET).upload(path, file, { cacheControl:'3600', upsert:false });
+  const { error } = await db.storage.from(COVER_BUCKET).upload(path, file, { cacheControl:'3600', upsert:false, metadata: { owner_id: userId } });
   if(error) throw error;
   return path;
 }
@@ -31,7 +39,10 @@ export async function signedCoverImageUrl(path, expiresInSeconds){
 
 export async function deleteCoverImage(path){
   if(!path) return;
-  try{ await db.storage.from(COVER_BUCKET).remove([path]); }
+  try{
+    requireSignedInUser('delete an image');
+    await db.storage.from(COVER_BUCKET).remove([path]);
+  }
   catch(err){ console.warn('Could not delete stored image', err); }
 }
 
