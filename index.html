@@ -173,9 +173,10 @@
             <button class="btn small" onclick="sendSelectionBackward()">Down one</button>
             <button class="btn small" onclick="sendSelectionToBack()">To back</button>
           </div>
+          <button class="btn small" id="btnToggleDebug" onclick="toggleDebugMode()">Debug: Off</button>
           <div id="layersList"></div>
         </div>
-        <div class="section">
+        <div class="section" id="schemaSection" style="display:none">
           <h2>Template schema (JSON)</h2>
           <pre id="schemaOutput"></pre>
         </div>

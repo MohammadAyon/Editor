@@ -24,7 +24,7 @@ export function requireSignedInUser(action){
 export async function uploadCoverImage(file, folder){
   const userId = requireSignedInUser('upload an image');
   const ext = file.name && file.name.includes('.') ? file.name.split('.').pop() : 'png';
-  const path = `${folder}/${crypto.randomUUID()}.${ext}`;
+  const path = `${userId}/${folder}/${crypto.randomUUID()}.${ext}`;
   const { error } = await db.storage.from(COVER_BUCKET).upload(path, file, { cacheControl:'3600', upsert:false, metadata: { owner_id: userId } });
   if(error) throw error;
   return path;

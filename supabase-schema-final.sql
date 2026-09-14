@@ -132,13 +132,13 @@ on public.brand_images
 for delete
 using (auth.uid() = owner_id);
 
--- Storage bucket: private and authenticated-only access
+-- Storage bucket: private and owner-only access.
 create policy "users_can_read_own_cover_images"
 on storage.objects
 for select
 using (
   bucket_id = 'cover-images'
-  and auth.uid() is not null
+  and (storage.foldername(name))[1] = (auth.uid())::text
 );
 
 create policy "users_can_upload_own_cover_images"
@@ -146,8 +146,8 @@ on storage.objects
 for insert
 with check (
   bucket_id = 'cover-images'
-  and auth.uid() is not null
-  and (storage.foldername(name))[1] in ('projects', 'logos')
+  and (storage.foldername(name))[1] = (auth.uid())::text
+  and (storage.foldername(name))[2] in ('projects', 'logos', 'elements')
 );
 
 create policy "users_can_delete_own_cover_images"
@@ -155,8 +155,5 @@ on storage.objects
 for delete
 using (
   bucket_id = 'cover-images'
-  and auth.uid() is not null
+  and (storage.foldername(name))[1] = (auth.uid())::text
 );
-
--- Optional: if you want to enforce that only the owner can delete their own items,
--- keep the same logic at the application layer and verify owner_id is set correctly.

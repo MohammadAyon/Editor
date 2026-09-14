@@ -132,7 +132,6 @@ export async function updateLoadedPreset(){
     try{
       requireSignedInUser('update this preset');
       const row = presetToRow(updated);
-      row.owner_id = currentUserId();
       const { error } = await db.from('presets').update(row).eq('id', preset.id);
       if(error){ alert('Could not update this preset: ' + error.message); return; }
     }catch(err){
